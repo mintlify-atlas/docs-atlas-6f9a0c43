@@ -1,0 +1,239 @@
+---
+title: "Transforming Data"
+description: "Add and update columns using update() and direct assignment, compute derived columns with f-expressions, cast types, apply conditional logic with ifelse(), and sort frames."
+---
+
+datatable transforms work in the `j` position of `DT[i, j]`. Operations produce new columns unless you assign them back to the frame or use `update()`.
+
+```python
+from datatable import dt, f, update, ifelse
+from datetime import date
+
+source = {
+    "dates":    [date(2000, 1, 5), date(2010, 11, 23), date(2020, 2, 29), None],
+    "integers": range(1, 5),
+    "floats":   [10.0, 11.5, 12.3, -13],
+    "strings":  ['A', 'B', None, 'D'],
+}
+DT = dt.Frame(source)
+```
+
+---
+
+## Column Expressions (f-expressions)
+
+Arithmetic, string, and cross-column operations all work in `j`. Results are returned as a new frame — column names are auto-generated unless you supply them.
+
+```python
+DT[:, f.integers * 2]
+# -- C0 (int32) --
+# 2, 4, 6, 8
+
+DT[:, 'pre_' + f.strings]
+# -- C0 (str32) --
+# pre_A, pre_B, NA, pre_D
+
+DT[:, f.integers + f.floats]
+# -- C0 (float64) --
+# 11.0, 13.5, 15.3, -9.0
+
+DT[:, f.integers + '_' + f.strings]
+# -- C0 (str32) --
+# 1_A, 2_B, NA, 4_D
+```
+
+### Math functions
+
+```python
+DT[:, dt.math.pow(f.floats, 3)]
+DT[:, dt.time.year(f.dates)]
+```
+
+### Column-wise vs. row-wise
+
+Most built-in functions are **column-wise** (reduce a column to a scalar):
+
+```python
+DT[:, dt.sum(f['integers':'floats'])]
+# integers: 10, floats: 20.8
+```
+
+Functions prefixed with `row` operate **across columns in each row**:
+
+```python
+DT[:, dt.rowsum(f['integers':'floats'])]
+# 11.0, 13.5, 15.3, -9.0
+```
+
+### Filtering rows in the same expression
+
+The `i` filter applies before `j`, so you can combine both:
+
+```python
+DT[f.dates < dt.time.ymd(2020, 1, 1), f.integers ** 4]
+# returns only rows where date < 2020, computes integers^4
+```
+
+---
+
+## Conditional Columns with `ifelse()`
+
+`ifelse(condition, value_if_true, value_if_false)` mirrors Python's ternary operator and works element-wise:
+
+```python
+DT[:, ifelse(f.integers % 2 == 0, 'even', 'odd')]
+# odd, even, odd, even
+```
+
+Nested `ifelse` calls are also supported for multiple conditions.
+
+---
+
+## Type Casting with `as_type()`
+
+### Single column
+
+```python
+DT[:, dt.as_type(f.integers, str)]
+# integers column becomes str32
+
+DT[:, dt.as_type(f.integers, dt.Type.str32)]
+# equivalent using datatable's Type enum
+```
+
+### Multiple columns
+
+```python
+DT[:, dt.as_type(f['integers', 'floats'], str)]
+# both columns become str32
+```
+
+---
+
+## Adding and Updating Columns
+
+### Direct assignment
+
+Assign a frame expression or an f-expression to create or replace a column:
+
+```python
+# Add a new column
+DT['months'] = DT[:, dt.time.month(f.dates)]
+
+# Add multiple columns at once
+DT[:, ['months', 'int_squared']] = DT[:, [dt.time.month(f.dates), f.integers ** 2]]
+
+# Assign an f-expression directly (evaluates against DT)
+DT['integers'] = f.integers * 3
+
+# Update an existing column
+DT['strings'] = DT[:, f.strings[:1]]
+```
+
+### `update()` — in-place, no reassignment needed
+
+`update()` uses keyword arguments where each key is the target column name:
+
+```python
+# Add a single column in-place
+DT[:, update(year=dt.time.year(f.dates))]
+
+# Add multiple columns in-place
+DT[:, update(
+    year         = dt.time.year(f.dates),
+    float_doubled = f.floats * 2,
+)]
+
+# Update an existing column
+DT[:, update(year=f.year / 12)]
+
+# Update only a subset of rows
+DT[f.A > 10, update(A=f.A * 5)]
+```
+
+<Note>
+`update()` modifies the frame in place. You do **not** need to assign the result back to `DT`. This contrasts with direct assignment and `extend()`, which return new frames.
+</Note>
+
+#### Unpacking with `**` — useful for dynamic column names
+
+```python
+DT[:, update(**{"extra column": f.A + f.B})]
+```
+
+### `extend()` — add new columns, returns a new frame
+
+`extend()` works via f-expressions and a dictionary. Unlike `update()`, it does not modify the frame in place — the result must be assigned back:
+
+```python
+# Add one column
+DT = DT[:, f[:].extend({"months": dt.time.month(f.dates)})]
+
+# Add multiple columns
+DT = DT[:, f[:].extend({
+    "year":        dt.time.year(f.dates),
+    "int_squared": f.integers ** 2,
+})]
+```
+
+---
+
+## Replacing Values
+
+`DT.replace(replace_what, replace_with)` operates on the **entire frame** in place:
+
+```python
+# Replace a single value
+DT.replace(1, -1)
+
+# Replace multiple values (list — lengths must match, or replace_with has one element)
+DT.replace(['A', 10.0], ['A_pre', 30.0])
+DT.replace([2, 3], 20)    # both 2 and 3 → 20
+
+# Replace via a dictionary
+DT.replace({4: 24, 'B': 'BBB'})
+```
+
+Values not found in the frame are silently ignored.
+
+---
+
+## Sorting
+
+Sort using `dt.sort()` in the square-bracket selector or via `DT.sort()`:
+
+```python
+# Ascending (default)
+DT[:, :, dt.sort('dates')]
+DT.sort('dates')
+
+# Descending — two equivalent approaches
+DT[:, :, dt.sort('integers', reverse=True)]
+DT[:, :, dt.sort(-f.integers)]
+
+# Sort by multiple columns
+DT[:, :, dt.sort('dates', 'integers')]
+DT[:, :, dt.sort(-f.integers, f.dates)]   # mixed direction
+
+# Control null placement (default: "first")
+DT[:, :, dt.sort('dates', na_position='last')]
+DT[:, :, dt.sort('dates', na_position='remove')]  # remove rows with null
+```
+
+<Tip>
+`na_position` and the `reverse` parameter are only available in the `dt.sort()` function — not in `DT.sort()` method when using negated f-expressions.
+</Tip>
+
+---
+
+## Renaming Columns
+
+Rename columns by assigning to `DT.names`:
+
+```python
+# Rename all columns
+DT.names = ['date_col', 'int_col', 'float_col', 'str_col']
+
+# Rename specific columns via a dict
+DT.names = {'integers': 'count', 'floats': 'amount'}
+```

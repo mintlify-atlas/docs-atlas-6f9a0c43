@@ -1,0 +1,192 @@
+---
+title: "The Frame"
+description: "A Frame is the primary data structure in datatable — a two-dimensional, column-oriented container with typed columns."
+---
+
+A `Frame` is the fundamental unit of data in `datatable`. Like a pandas DataFrame or a SQL table, it organizes data into rows and columns. Each column has a fixed type; types can differ between columns but not within a single column.
+
+Internally, a Frame stores data separately per column, making it well-suited for workloads where the number of rows vastly exceeds the number of columns.
+
+## Creating a Frame
+
+<Steps>
+  <Step title="From a dictionary or keyword arguments">
+    Pass a dictionary of column names to lists of values, or use keyword arguments:
+
+    ```python
+    import datatable as dt
+
+    DT = dt.Frame({"n": [1, 3, 5], "s": ["foo", "bar", "baz"]})
+    # or equivalently:
+    DT = dt.Frame(n=[1, 3, 5], s=["foo", "bar", "baz"])
+    ```
+
+    Output:
+
+    ```
+       |     n  s
+       | int32  str32
+    -- + -----  -----
+     0 |     1  foo
+     1 |     3  bar
+     2 |     5  baz
+
+    [3 rows x 2 columns]
+    ```
+  </Step>
+
+  <Step title="From a numpy array">
+    ```python
+    import numpy as np
+    import datatable as dt
+
+    np.random.seed(1)
+    NP = np.random.randn(5)
+    DT = dt.Frame(NP)
+    ```
+
+    The column is named `C0` by default and gets type `float64`.
+  </Step>
+
+  <Step title="From a pandas DataFrame">
+    ```python
+    import pandas as pd
+    import datatable as dt
+
+    PD = pd.DataFrame({"A": range(5), "B": list("abcde")})
+    DT = dt.Frame(PD)
+    ```
+  </Step>
+
+  <Step title="From a CSV or other file">
+    Use `dt.fread()` to read external files. It automatically detects separators, column types, and quoting rules, supports multi-threaded reading, and can load from URLs, zip archives, shell commands, and glob patterns:
+
+    ```python
+    DT = dt.fread("~/data/transactions.csv")
+    DT = dt.fread("https://example.com/data.csv")
+    ```
+  </Step>
+
+  <Step title="From a saved .jay file">
+    `.jay` is datatable's native binary format. Frames saved to `.jay` open instantly regardless of size:
+
+    ```python
+    DT = dt.fread("data.jay")
+    ```
+  </Step>
+</Steps>
+
+You can also specify column types at construction time using `stypes`:
+
+```python
+DT = dt.Frame(A=range(5), B=[1.7, 3.4, 0, None, -1.0], stypes={"A": dt.int64})
+```
+
+## Frame properties
+
+Once you have a Frame, several properties let you inspect its shape and schema:
+
+```python
+DT.nrows    # number of rows (int)
+DT.ncols    # number of columns (int)
+DT.shape    # (nrows, ncols) tuple
+DT.names    # tuple of column names
+DT.stypes   # tuple of dt.stype values, one per column
+DT.types    # tuple of dt.Type values, one per column (preferred)
+DT.ltypes   # tuple of dt.ltype values, one per column
+```
+
+Example:
+
+```python
+import datatable as dt
+
+DT = dt.Frame({"id": [1, 2, 3], "price": [9.99, 4.49, 14.0], "label": ["a", "b", "c"]})
+
+print(DT.shape)   # (3, 3)
+print(DT.names)   # ('id', 'price', 'label')
+print(DT.stypes)  # (stype.int32, stype.float64, stype.str32)
+```
+
+## Indexing with DT[i, j]
+
+Almost all data selection in datatable uses the `DT[i, j]` notation, where `i` selects rows and `j` selects columns. This mirrors matrix indexing from mathematics, R, and numpy.
+
+```python
+DT[:, "A"]          # all rows, column named "A"
+DT[:10, :]          # first 10 rows, all columns
+DT[27, 3]           # single element: row 27, column 3 (0-based)
+DT[::-1, "A":"D"]   # all rows reversed, columns A through D
+DT[:, ["A", "B"]]   # all rows, columns A and B
+```
+
+The `i` selector accepts integers, slices, lists, expressions, boolean Frames, and more. The `j` selector accepts column names (strings), indices (integers), slices, lists, types, and expressions.
+
+<Tip>
+For filtered selections and computed columns, use `f`-expressions in `i` and `j`. See [f-expressions](/concepts/f-expressions) for the full reference.
+</Tip>
+
+You can also assign and delete using the same syntax:
+
+```python
+DT[f.price < 0, "price"] = 0      # replace negative prices with 0
+del DT[:, "label"]                 # delete the "label" column
+del DT[f.id < 0, :]               # delete rows where id is negative
+```
+
+## Inspecting a Frame
+
+Use `.head()` and `.tail()` to preview rows, and `str()` to get a compact summary:
+
+```python
+DT.head(5)    # returns a new Frame with the first 5 rows
+DT.tail(5)    # returns a new Frame with the last 5 rows
+str(DT)       # string representation shown in the terminal
+```
+
+In Jupyter, displaying a Frame renders it as an HTML table automatically.
+
+## Statistics
+
+Compute per-column summary statistics with these methods:
+
+```python
+DT.sum()
+DT.mean()
+DT.min()
+DT.max()
+DT.sd()
+DT.mode()
+DT.nunique()
+DT.countna()
+```
+
+Each returns a new single-row Frame. Use the `1`-suffix variant (e.g., `.mean1()`) when working with a one-column Frame to get a scalar result directly.
+
+## Exporting a Frame
+
+Export to other formats with these methods:
+
+```python
+DT.to_pandas()          # pandas DataFrame
+DT.to_numpy()           # numpy ndarray
+DT.to_dict()            # dict of {column_name: [values]}
+DT.to_list()            # list of columns, each column is a list
+DT.to_tuples()          # list of rows, each row is a tuple
+DT.to_csv("out.csv")    # write to CSV file
+DT.to_jay("data.jay")   # write to binary .jay file (fast reload)
+DT.to_arrow()           # Apache Arrow table
+```
+
+<Note>
+`to_pandas()` and `to_numpy()` require pandas and numpy to be installed, respectively.
+</Note>
+
+## Appending rows and columns
+
+Use `.rbind()` to append rows and `.cbind()` to append columns:
+
+```python
+DT.rbind(DT2)   # append rows of DT2 to DT
+DT.cbind(DT2)   # append columns of DT2 to DT
+```

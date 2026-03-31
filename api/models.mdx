@@ -1,0 +1,383 @@
+---
+title: "Models Module"
+description: "Built-in machine learning models and dataset utilities in `datatable.models`, including FTRL, LinearModel, aggregate, and k-fold splitting."
+---
+
+The `datatable.models` module contains built-in machine learning models and dataset preparation utilities. All models operate directly on datatable `Frame` objects, with no conversion to pandas or numpy required.
+
+```python
+from datatable.models import Ftrl, LinearModel, aggregate, kfold, kfold_random
+```
+
+## `Ftrl`
+
+`Ftrl` implements the **Follow the Regularized Leader (FTRL-Proximal)** online learning algorithm. It supports binomial logistic regression, multinomial classification, and regression for continuous targets. Training is fully parallel using the Hogwild approach.
+
+Features are hashed with a 64-bit function: integers and booleans via identity, floats via mantissa trimming, strings via Murmur2, and date/time types via their internal integer representation.
+
+### Constructor
+
+```python
+from datatable.models import Ftrl
+
+model = Ftrl(
+    alpha=0.005,
+    beta=1.0,
+    lambda1=0.0,
+    lambda2=0.0,
+    nbins=1_000_000,
+    nepochs=1,
+    interactions=None,
+    model_type="auto",
+    double_precision=False,
+)
+```
+
+<ParamField path="alpha" type="float" default="0.005">
+  Learning rate `α` in the per-coordinate FTRL-Proximal algorithm. Controls the step size.
+</ParamField>
+
+<ParamField path="beta" type="float" default="1.0">
+  Smoothing parameter `β` in the per-coordinate FTRL-Proximal algorithm.
+</ParamField>
+
+<ParamField path="lambda1" type="float" default="0.0">
+  L1 regularization parameter `λ₁`. Encourages sparsity in the model weights.
+</ParamField>
+
+<ParamField path="lambda2" type="float" default="0.0">
+  L2 regularization parameter `λ₂`. Penalizes large weights.
+</ParamField>
+
+<ParamField path="nbins" type="int" default="1000000">
+  Number of bins used by the hashing trick. Larger values reduce hash collisions.
+</ParamField>
+
+<ParamField path="nepochs" type="float" default="1">
+  Number of training epochs. Fractional values are supported.
+</ParamField>
+
+<ParamField path="interactions" type="List[List[str]] | None" default="None">
+  Explicit feature interaction pairs. Each inner list specifies column names whose hash values are combined.
+</ParamField>
+
+<ParamField path="model_type" type='"auto" | "regression" | "binomial" | "multinomial"' default='"auto"'>
+  Determines the type of model to build. `"auto"` infers the type from the target column.
+</ParamField>
+
+<ParamField path="double_precision" type="bool" default="false">
+  Use `float64` arithmetic internally instead of `float32`.
+</ParamField>
+
+### Methods
+
+#### `fit(X, y)`
+
+Train the model on feature frame `X` and target frame `y`. Can be called multiple times to continue training.
+
+```python
+model.fit(X_train, y_train)
+```
+
+#### `predict(X)`
+
+Return predictions for frame `X` as a new `Frame`. Output type depends on `model_type`.
+
+```python
+predictions = model.predict(X_test)
+```
+
+#### `reset()`
+
+Reset model weights to their initial state without changing hyperparameters.
+
+```python
+model.reset()
+```
+
+### Key properties
+
+| Property | Type | Description |
+|---|---|---|
+| `model_type` | `str` | The model type to build (`"auto"`, `"binomial"`, etc.). |
+| `model_type_trained` | `str` | The model type that was actually trained. |
+| `feature_importances` | `Frame` | Feature importances computed during training. |
+| `labels` | `Frame` | Classification labels (multinomial/binomial). |
+| `params` | `namedtuple` | All hyperparameters as a named tuple. |
+| `model` | `Frame` | The model's `z` and `n` coefficient columns. |
+| `colnames` | `List[str]` | Column names of the training frame. |
+| `mantissa_nbits` | `int` | Mantissa bits used when hashing float features. |
+
+### Example
+
+```python
+import datatable as dt
+from datatable.models import Ftrl
+
+train = dt.fread("train.csv")
+test  = dt.fread("test.csv")
+
+X_train = train[:, :-1]
+y_train = train[:, -1]
+
+model = Ftrl(alpha=0.01, nbins=500_000, nepochs=3)
+model.fit(X_train, y_train)
+
+preds = model.predict(test)
+```
+
+---
+
+## `LinearModel`
+
+`LinearModel` implements a **linear model with stochastic gradient descent (SGD)** learning. It supports linear regression, binomial classification, and multinomial classification. Both `fit` and `predict` are fully parallel.
+
+### Constructor
+
+```python
+from datatable.models import LinearModel
+
+model = LinearModel(
+    eta0=0.005,
+    eta_decay=0.0,
+    eta_drop_rate=100.0,
+    eta_schedule="constant",
+    lambda1=0.0,
+    lambda2=0.0,
+    nepochs=1,
+    model_type="auto",
+    double_precision=False,
+    negative_class=False,
+    seed=0,
+)
+```
+
+<ParamField path="eta0" type="float" default="0.005">
+  Initial learning rate.
+</ParamField>
+
+<ParamField path="eta_decay" type="float" default="0.0">
+  Decay coefficient for `"time-based"` and `"step-based"` learning rate schedules.
+</ParamField>
+
+<ParamField path="eta_drop_rate" type="float" default="100.0">
+  Drop rate for the `"step-based"` learning rate schedule.
+</ParamField>
+
+<ParamField path="eta_schedule" type='"constant" | "time-based" | "step-based" | "exponential"' default='"constant"'>
+  Learning rate schedule. Controls how `eta0` changes across epochs.
+</ParamField>
+
+<ParamField path="lambda1" type="float" default="0.0">
+  L1 regularization parameter.
+</ParamField>
+
+<ParamField path="lambda2" type="float" default="0.0">
+  L2 regularization parameter.
+</ParamField>
+
+<ParamField path="nepochs" type="float" default="1">
+  Number of training epochs.
+</ParamField>
+
+<ParamField path="model_type" type='"auto" | "regression" | "binomial" | "multinomial"' default='"auto"'>
+  Type of model to build.
+</ParamField>
+
+<ParamField path="double_precision" type="bool" default="false">
+  Use `float64` arithmetic instead of `float32`.
+</ParamField>
+
+<ParamField path="negative_class" type="bool" default="false">
+  If `True`, an explicit "negative" class is added for multinomial classification.
+</ParamField>
+
+<ParamField path="seed" type="int" default="0">
+  Seed for quasi-random row shuffling during SGD.
+</ParamField>
+
+### Methods
+
+#### `fit(X, y)`
+
+Train the model on feature frame `X` and target frame `y`.
+
+```python
+model.fit(X_train, y_train)
+```
+
+#### `predict(X)`
+
+Return predictions for frame `X`.
+
+```python
+preds = model.predict(X_test)
+```
+
+#### `is_fitted()`
+
+Return `True` if the model has been trained, `False` otherwise.
+
+```python
+if model.is_fitted():
+    preds = model.predict(X)
+```
+
+#### `reset()`
+
+Clear trained weights and return the model to its initial untrained state.
+
+```python
+model.reset()
+```
+
+### Example
+
+```python
+import datatable as dt
+from datatable.models import LinearModel
+
+DT = dt.fread("dataset.csv")
+X = DT[:, :-1]
+y = DT[:, -1]
+
+model = LinearModel(eta0=0.01, nepochs=5, eta_schedule="time-based")
+model.fit(X, y)
+
+preds = model.predict(X)
+```
+
+---
+
+## `aggregate(frame, ...)`
+
+Aggregate a `Frame` into clusters. Each cluster consists of a set of member rows and is represented by one exemplar row. Useful for summarizing large datasets before visualization or modeling.
+
+```python
+from datatable.models import aggregate
+
+exemplars, members = aggregate(
+    frame,
+    min_rows=500,
+    n_bins=500,
+    nx_bins=50,
+    ny_bins=50,
+    nd_max_bins=500,
+    max_dimensions=50,
+    seed=0,
+    double_precision=False,
+    fixed_radius=None,
+)
+```
+
+**Parameters**
+
+<ParamField path="frame" type="Frame">
+  Input frame with numeric or string columns. Non-numeric columns are ignored in the ND aggregation algorithm.
+</ParamField>
+
+<ParamField path="min_rows" type="int" default="500">
+  Minimum number of rows required for aggregation to run. Frames smaller than this threshold have all rows treated as exemplars.
+</ParamField>
+
+<ParamField path="n_bins" type="int" default="500">
+  Number of bins for 1D aggregation.
+</ParamField>
+
+<ParamField path="nd_max_bins" type="int" default="500">
+  Maximum number of exemplars produced by the ND algorithm. The exact count may vary across runs due to parallelization.
+</ParamField>
+
+<ParamField path="max_dimensions" type="int" default="50">
+  Column count at which the projection method is used for ND aggregation.
+</ParamField>
+
+<ParamField path="seed" type="int" default="0">
+  Seed for the projection method's random number generator.
+</ParamField>
+
+<ParamField path="fixed_radius" type="float | None" default="None">
+  Fixed bubble radius for the ND algorithm. When set, `nd_max_bins` has no effect. Use with caution on large data — the number of exemplars can equal the number of rows.
+</ParamField>
+
+**Returns** a tuple of two frames:
+- **Exemplars frame** — shape `(nexemplars, ncols + 1)`. Contains the original columns plus a `members_count` column (`int32`) indicating how many rows each exemplar represents.
+- **Members frame** — shape `(nrows, 1)`. The `exemplar_id` column (`int32`) maps each input row to its exemplar's row index.
+
+### Example
+
+```python
+import datatable as dt
+from datatable.models import aggregate
+
+DT = dt.fread("large_dataset.csv")
+
+exemplars, members = aggregate(DT, nd_max_bins=200, seed=42)
+print(f"Reduced {DT.nrows} rows to {exemplars.nrows} exemplars")
+```
+
+---
+
+## `kfold(nrows, nsplits)`
+
+Split `nrows` rows into `nsplits` sequential train/test folds. The `i`-th fold uses rows `[i·nrows/nsplits, (i+1)·nrows/nsplits)` as the test set and all remaining rows as training data.
+
+```python
+from datatable.models import kfold
+
+splits = kfold(nrows=1000, nsplits=5)
+
+for train_rows, test_rows in splits:
+    X_train = DT[train_rows, features]
+    X_test  = DT[test_rows,  features]
+    y_train = DT[train_rows, target]
+    y_test  = DT[test_rows,  target]
+```
+
+**Parameters**
+
+<ParamField path="nrows" type="int">
+  Total number of rows to split. Must match the row count of the frame you apply the selectors to.
+</ParamField>
+
+<ParamField path="nsplits" type="int">
+  Number of folds. Must be at least `2` and no larger than `nrows`.
+</ParamField>
+
+**Returns** `List[Tuple]` — a list of `nsplits` tuples `(train_rows, test_rows)`, where each component is a row selector (a Python `range` or a single-column `Frame`).
+
+---
+
+## `kfold_random(nrows, nsplits, seed=None)`
+
+Like `kfold`, but assigns rows to folds randomly so each row has an equal probability of ending up in any fold. Row indices within each fold are sorted.
+
+```python
+from datatable.models import kfold_random
+
+splits = kfold_random(nrows=1000, nsplits=5, seed=42)
+
+for train_rows, test_rows in splits:
+    X_train = DT[train_rows, :]
+    X_test  = DT[test_rows,  :]
+```
+
+**Parameters**
+
+<ParamField path="nrows" type="int">
+  Total number of rows to split.
+</ParamField>
+
+<ParamField path="nsplits" type="int">
+  Number of folds. Must be at least `2` and no larger than `nrows`.
+</ParamField>
+
+<ParamField path="seed" type="int | None" default="None">
+  Random seed. Providing the same seed guarantees reproducible splits across runs.
+</ParamField>
+
+**Returns** `List[Tuple]` — a list of `nsplits` tuples `(train_rows, test_rows)`.
+
+<Tip>
+Use `kfold_random` when your data has an ordering that could bias sequential splits (e.g., time-sorted data where you only want temporal cross-validation for `kfold`).
+</Tip>

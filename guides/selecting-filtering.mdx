@@ -1,0 +1,245 @@
+---
+title: "Selecting and Filtering Data"
+description: "Select columns by name, type, or position; filter rows with boolean expressions, slices, and integer lists; combine row and column selection in a single DT[i, j] expression."
+---
+
+datatable uses a unified `DT[i, j]` indexing syntax. `i` selects rows and `j` selects columns. Either can be omitted or set to `:` / `...` to mean "all".
+
+```python
+from datatable import dt, f
+from datetime import date
+
+source = {
+    "dates":    [date(2000, 1, 5), date(2010, 11, 23), date(2020, 2, 29), None],
+    "integers": range(1, 5),
+    "floats":   [10.0, 11.5, 12.3, -13],
+    "strings":  ['A', 'B', None, 'D'],
+}
+DT = dt.Frame(source)
+```
+
+## Selecting Columns
+
+The `j` position controls which columns are returned.
+
+### By name
+
+```python
+DT[:, 'dates']
+# or shorthand (all rows implied):
+DT['dates']
+```
+
+### By position
+
+```python
+DT[..., 2]    # 3rd column
+DT[:, -2]     # 2nd column from the end
+DT[0]         # shorthand — first column, all rows
+```
+
+### By list of names or positions
+
+```python
+DT[:, ['integers', 'strings']]
+DT[:, (-3, 2, 3)]   # tuple of positions
+```
+
+Mixing names and integers in the same list raises `TypeError`.
+
+### By slice
+
+String slices are **inclusive** on both ends:
+
+```python
+DT[:, 'dates':'strings']   # all four columns
+DT[:, slice('integers', 'strings')]
+```
+
+Integer slices follow Python conventions (end is exclusive):
+
+```python
+DT[:, 1:3]      # columns at index 1 and 2
+DT[:, ::-1]     # all columns reversed
+```
+
+Multiple slices can be combined in a list:
+
+```python
+DT[:, [slice("dates", "integers"), slice("floats", "strings")]]
+```
+
+### By data type
+
+```python
+DT[:, int]              # all int columns
+DT[:, dt.Type.float64]  # exact type
+DT[:, [date, str]]      # list of types
+```
+
+### By boolean mask
+
+The mask length must equal the number of columns:
+
+```python
+DT[:, [True, True, False, False]]
+
+# List comprehension — select columns whose name contains "i"
+DT[:, ["i" in name for name in DT.names]]
+
+# Select numeric columns with mean > 3
+DT[:, [col.type.is_numeric and col.mean1() > 3 for col in DT]]
+```
+
+### Via f-expressions
+
+The `f` symbol mirrors all column-selector options:
+
+```python
+DT[:, f.dates]
+DT[:, f[-1]]                           # last column
+DT[:, f['integers':'strings']]         # named slice
+DT[:, f[date, int, float]]             # multiple types
+DT[:, f["dates":"integers", "floats":"strings"]]  # multi-slice
+```
+
+<Note>
+If a column name is a Python keyword (`def`, `del`, …) use bracket notation `f['del']` — dot access is not available.
+</Note>
+
+### Removing columns with `.remove()`
+
+```python
+DT[:, f[:].remove(f.dates)]            # remove by name
+DT[:, f[:].remove(f[0])]              # remove by position
+DT[:, f[:].remove(f[1:3])]            # remove by slice
+DT[:, f[:].remove(f[int, float])]     # remove by type
+```
+
+---
+
+## Filtering Rows
+
+The `i` position controls which rows are returned.
+
+### By single position
+
+```python
+DT[0, :]    # first row
+DT[-1, :]   # last row
+```
+
+### By sequence of positions
+
+```python
+DT[[1, 2, 3], :]              # list
+DT[range(1, 3), :]            # range
+DT[dt.Frame([1, 2, 3]), :]    # one-column integer Frame
+```
+
+### By slice
+
+```python
+DT[1:3, :]          # rows 1 and 2
+DT[::-1, :]         # all rows reversed
+DT[-1:-3:-1, :]     # last two rows, reversed
+
+# Multiple slices
+DT[[slice(1, 3), slice(5, 8)], :]
+```
+
+### By boolean sequence
+
+```python
+DT[[True, True, False, False], :]
+
+# Generator expression
+DT[(n % 2 == 0 for n in range(DT.nrows)), :]
+```
+
+### By f-expressions (boolean filter)
+
+```python
+# Date comparison
+DT[f.dates < dt.Frame([date(2020, 1, 1)]), :]
+
+# Arithmetic condition
+DT[f.integers % 2 != 0, :]
+
+# Compound condition
+DT[(f.integers == 3) & (f.strings == None), ...]
+
+# Filter by type group
+DT[f[float] < 1, :]
+
+# Row-wise aggregation filter
+DT[dt.rowsum(f[int, float]) > 12, :]
+```
+
+---
+
+## Combined Row and Column Selection
+
+Both `i` and `j` can be specified together:
+
+```python
+DT[0, slice(1, 3)]    # first row, columns 1–2
+
+DT[2:6, ["i" in name for name in DT.names]]
+
+DT[f.integers > dt.mean(f.floats) - 3, f['strings':'integers']]
+```
+
+### Single value access
+
+Passing integer scalars to both `i` and `j` returns a Python scalar:
+
+```python
+DT[0, 0]          # datetime.date(2000, 1, 5)
+DT[0, 2]          # 10.0
+DT[-3, 'strings'] # 'B'
+```
+
+---
+
+## Excluding (Deselecting) Rows and Columns
+
+Use list comprehensions to exclude specific columns or rows without deleting them:
+
+```python
+# Exclude one column
+DT[:, [name for name in DT.names if name != "integers"]]
+
+# Exclude multiple columns
+DT[:, [name not in ("integers", "dates") for name in DT.names]]
+
+# Exclude non-numeric columns
+DT[2:7, [not coltype.is_numeric for coltype in DT.types]]
+
+# Exclude a range of rows via complementary slices
+DT[[slice(None, 3), slice(7, None)], :]
+```
+
+---
+
+## Deleting Rows and Columns
+
+`del` performs **in-place** deletion — no reassignment needed.
+
+```python
+# Delete multiple rows
+del DT[3:7, :]
+
+# Delete a single row
+del DT[3, :]
+
+# Delete a column by name
+del DT['strings']
+
+# Delete multiple columns
+del DT[:, ['dates', 'floats']]
+```
+
+<Warning>
+Deletion with `del` is destructive and in-place. There is no undo — copy the frame first if you need to preserve the original.
+</Warning>

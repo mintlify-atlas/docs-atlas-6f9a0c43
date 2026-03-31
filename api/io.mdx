@@ -1,0 +1,331 @@
+---
+title: "I/O Functions"
+description: "Functions for reading data from files, URLs, archives, and in-memory sources into datatable Frames."
+---
+
+## fread
+
+```python
+fread(
+    anysource=None, *, file=None, text=None, cmd=None, url=None,
+    columns=None, sep=None, dec=".", max_nrows=None, header=None,
+    na_strings=None, verbose=False, fill=False, encoding=None,
+    skip_to_string=None, skip_to_line=0, skip_blank_lines=False,
+    strip_whitespace=True, quotechar='"', tempdir=None,
+    nthreads=None, logger=None, multiple_sources="warn",
+    memory_limit=None
+)
+```
+
+Read data from a variety of input formats and produce a `Frame` as the result. Recognized formats include CSV, Jay, XLSX, and plain text. Data may also reside inside an archive such as `.tar`, `.gz`, `.zip`, `.bz2`, or `.tgz`.
+
+<Note>
+Only one of `anysource`, `file`, `text`, `cmd`, or `url` may be specified at once.
+</Note>
+
+### Parameters
+
+<ParamField path="anysource" type="str | bytes | file | Pathlike | List">
+  The primary input source. When unnamed, fread attempts to guess its type: `file` if a plain path, `text` if the string contains newlines, or `url` if the string starts with `https://`, `s3://`, or similar.
+</ParamField>
+
+<ParamField path="file" type="str | file | Pathlike">
+  A file source — either a path on disk or a Python file-like object (any object with a `.read()` method). File-like objects are read in single-threaded mode. To address a file inside an archive or a sheet inside a workbook, write the path as if the archive were a folder: `"data.zip/train.csv"`.
+</ParamField>
+
+<ParamField path="text" type="str | bytes">
+  Provide data directly as an in-memory blob rather than reading from a file.
+</ParamField>
+
+<ParamField path="cmd" type="str">
+  A shell command whose stdout is read as text. Useful for preprocessing large files before ingestion.
+</ParamField>
+
+<ParamField path="url" type="str">
+  URL of the input file. Data is downloaded to a temporary directory, read, then cleaned up. Public S3 bucket paths are also supported and are internally converted to HTTPS URLs. Proxy, password, or cookie managers configured on `urllib.request` are respected.
+</ParamField>
+
+<ParamField path="sep" type="str | None">
+  Field separator character. When `None` (default) the separator is auto-detected. Must be a single ASCII character; the characters `["'\`0-9a-zA-Z]` and non-ASCII characters are not allowed. Set `sep='\n'` to read in single-column mode.
+</ParamField>
+
+<ParamField path="dec" type='"." | ","' default=".">
+  Decimal point symbol used for floating-point numbers.
+</ParamField>
+
+<ParamField path="max_nrows" type="int">
+  Maximum number of rows to read. Any negative value means no limit.
+</ParamField>
+
+<ParamField path="header" type="bool | None">
+  Whether the first line of the file contains column names. When `None` (default), fread heuristically determines this from the file contents. If the header row has one fewer column than the data, the first data column is assumed to contain row names and is named `"index"`.
+</ParamField>
+
+<ParamField path="na_strings" type="List[str]">
+  Strings in the input that should be interpreted as missing (`NA`) values.
+</ParamField>
+
+<ParamField path="fill" type="bool" default="False">
+  When `True`, lines with fewer fields than other lines are padded with `NA` values rather than raising an error.
+</ParamField>
+
+<ParamField path="encoding" type="str | None">
+  Re-encode the input from this encoding into UTF-8 before parsing. Any codec registered with Python's `codec` module is accepted.
+</ParamField>
+
+<ParamField path="skip_to_string" type="str | None">
+  Skip all lines before the first line that contains this string, then start reading from that line. Cannot be combined with `skip_to_line`.
+</ParamField>
+
+<ParamField path="skip_to_line" type="int" default="0">
+  Number of lines to skip at the start of the file before parsing begins. Cannot be combined with `skip_to_string`.
+</ParamField>
+
+<ParamField path="skip_blank_lines" type="bool" default="False">
+  When `True`, empty lines in the input are ignored. When `False`, empty lines raise an `IOError` (unless `fill=True` or single-column mode is active).
+</ParamField>
+
+<ParamField path="strip_whitespace" type="bool" default="True">
+  Strip leading/trailing whitespace from unquoted string fields. Numeric fields always have whitespace stripped.
+</ParamField>
+
+<ParamField path="quotechar" type="string" default='"'>
+  The quote character used around fields in the CSV file.
+</ParamField>
+
+<ParamField path="nthreads" type="int | None">
+  Number of threads to use. Cannot exceed `dt.options.nthreads`. A value of `0` or a negative number means that many threads fewer than the maximum. Defaults to all available threads.
+</ParamField>
+
+<ParamField path="verbose" type="bool" default="False">
+  Print detailed internal progress information to stdout (or to `logger` if provided).
+</ParamField>
+
+<ParamField path="logger" type="object">
+  Logger object to receive verbose progress information. Providing this parameter implicitly enables verbose mode.
+</ParamField>
+
+<ParamField path="multiple_sources" type='"warn" | "error" | "ignore"' default='"warn"'>
+  Action when the input resolves to multiple sources. `"warn"` emits a warning and reads only the first. `"ignore"` silently reads only the first. `"error"` raises `dt.exceptions.IOError`. Use `iread()` to read all sources.
+</ParamField>
+
+<ParamField path="memory_limit" type="int">
+  Advisory memory limit in bytes. When fread detects it needs more RAM than this limit, it streams intermediate data to a temporary binary file on disk. The resulting Frame may be partially on-disk; materialise or save it as Jay for best performance.
+</ParamField>
+
+<ParamField path="tempdir" type="str | None">
+  Directory for temporary files. Defaults to the system temp directory as determined by Python's `tempfile` module.
+</ParamField>
+
+### Returns
+
+<ResponseField name="frame" type="Frame">
+  A single `Frame` object is always returned, regardless of whether one or multiple sources were provided.
+</ResponseField>
+
+### Examples
+
+<CodeGroup>
+
+```python CSV file
+from datatable import dt, fread
+
+fread("iris.csv")
+#     | sepal_length  sepal_width  petal_length  petal_width  species
+#     |      float64      float64       float64      float64  str32
+# --- + ------------  -----------  ------------  -----------  -------
+#   0 |          5.1          3.5           1.4          0.2  setosa
+#   1 |          4.9          3             1.4          0.2  setosa
+# [150 rows x 5 columns]
+```
+
+```python Inline text
+from datatable import fread
+
+data = ("col1,col2,col3\n"
+        "a,b,1\n"
+        "a,b,2\n"
+        "c,d,3")
+fread(data)
+#    | col1   col2    col3
+#    | str32  str32  int32
+# -- + -----  -----  -----
+#  0 | a      b          1
+#  1 | a      b          2
+#  2 | c      d          3
+# [3 rows x 3 columns]
+```
+
+```python URL
+from datatable import fread
+
+url = "https://raw.githubusercontent.com/Rdatatable/data.table/master/vignettes/flights14.csv"
+fread(url)
+# [253316 rows x 11 columns]
+```
+
+```python Archive / Excel
+from datatable import fread
+
+# Read a specific file inside a zip archive
+fread("data.zip/mtcars.csv")
+
+# Read a specific sheet from an Excel workbook (requires xlrd)
+fread("excel.xlsx/Sheet1")
+```
+
+</CodeGroup>
+
+#### Specifying a separator
+
+```python
+from datatable import fread
+
+data = """
+1:2:3:4
+5:6:7:8
+9:10:11:12
+"""
+fread(data, sep=":")
+#    |    C0     C1     C2     C3
+#    | int32  int32  int32  int32
+# -- + -----  -----  -----  -----
+#  0 |     1      2      3      4
+#  1 |     5      6      7      8
+#  2 |     9     10     11     12
+# [3 rows x 4 columns]
+```
+
+#### Custom NA strings and fill
+
+```python
+from datatable import fread
+
+data = """
+ID|Charges|Payment_Method
+634-VHG|28|Cheque
+365-DQC|33.5|Credit card
+264-PPR|631|--
+845-AJO|42.3|
+"""
+fread(data, na_strings=["--", ""])
+#    | ID       Charges  Payment_Method
+#    | str32    float64  str32
+# -- + -------  -------  --------------
+#  0 | 634-VHG     28    Cheque
+#  1 | 365-DQC     33.5  Credit card
+#  2 | 264-PPR    631    NA
+#  3 | 845-AJO     42.3  NA
+# [4 rows x 3 columns]
+```
+
+#### Column selection and renaming
+
+```python
+from datatable import dt, fread
+
+data = "a,b,c,d\n1,2,3,4\n5,6,7,8\n9,10,11,12"
+
+# Select a subset of columns
+fread(data, columns={"a", "b"})
+
+# Rename some columns
+fread(data, columns={"a": "A", "b": "B"})
+
+# Drop columns by assigning None
+fread(data, columns={"B": None, "D": None})
+
+# Force all columns to float32
+fread(data, columns=dt.float32)
+
+# Filter columns dynamically with a callable
+fread("iris.csv", columns=lambda cols: [
+    col.name == "species" or "length" in col.name
+    for col in cols
+], max_nrows=5)
+```
+
+#### Skipping lines and limiting rows
+
+```python
+from datatable import fread
+
+data = ("skip this line\n"
+        "a,b,c,d\n"
+        "1,2,3,4\n"
+        "5,6,7,8\n"
+        "9,10,11,12")
+
+fread(data, skip_to_line=2)
+fread(data, skip_to_string="a,b", max_nrows=2)
+```
+
+#### Shell command input
+
+```python
+from datatable import fread
+
+# Filter a TSV file for 2015 rows using awk before reading
+fread(cmd="""cat netflix.tsv | awk 'NR==1; /^2015-/'""")
+```
+
+---
+
+## iread
+
+```python
+iread(
+    anysource=None, *, file=None, text=None, cmd=None, url=None,
+    columns=None, sep=None, dec=".", max_nrows=None, header=None,
+    na_strings=None, verbose=False, fill=False, encoding=None,
+    skip_to_string=None, skip_to_line=None, skip_blank_lines=False,
+    strip_whitespace=True, quotechar='"',
+    tempdir=None, nthreads=None, logger=None, errors="warn",
+    memory_limit=None
+)
+```
+
+Similar to `fread()`, but reads **multiple sources at once** and returns a lazy iterator of `Frame` objects. Use `iread()` when the input is a list of files, a glob pattern, a multi-file archive, or a multi-sheet XLSX workbook.
+
+All parsing parameters are identical to `fread()`. The only additional parameter is `errors`.
+
+<ParamField path="errors" type='"warn" | "raise" | "ignore" | "store"' default='"warn"'>
+  Action to take when one of the input sources raises an error:
+
+  - `"warn"` — convert the error to a warning, skip the source, and continue.
+  - `"raise"` — raise the error immediately and stop iteration.
+  - `"ignore"` — silently skip erroneous sources.
+  - `"store"` — capture the exception and yield it as part of the iterator output, then continue with subsequent sources.
+</ParamField>
+
+### Returns
+
+<ResponseField name="iterator" type="Iterator[Frame] | Iterator[Frame | Exception]">
+  A lazy iterator that produces `Frame` objects, reading each source only when consumed. Each Frame carries a `.source` attribute describing where it was read from (file path, URL, archive entry, etc.).
+
+  When `errors="store"`, the iterator may yield either `Frame` objects or exception objects.
+</ResponseField>
+
+### Example
+
+```python
+from datatable import dt, iread
+
+# Read all CSV files in an archive
+for frame in iread("data.zip"):
+    print(frame.source, frame.shape)
+
+# Read all sheets in an Excel workbook
+frames = list(iread("workbook.xlsx"))
+
+# Read a list of files, storing errors instead of stopping
+for result in iread(["a.csv", "missing.csv", "b.csv"], errors="store"):
+    if isinstance(result, Exception):
+        print("Error:", result)
+    else:
+        print(result.shape)
+```
+
+<Note>
+`iread()` is lazy — each `Frame` is read only after the previous one has been consumed. You can interrupt iteration early without reading all sources.
+</Note>

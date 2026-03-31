@@ -1,0 +1,187 @@
+---
+title: "Linear Model"
+description: "Linear regression and classification using parallel stochastic gradient descent in datatable."
+---
+
+`LinearModel` is datatable's general-purpose linear model. It supports **linear regression**, **binomial classification**, and **multinomial classification**, all trained with parallel [stochastic gradient descent (SGD)](https://en.wikipedia.org/wiki/Stochastic_gradient_descent). Both `.fit()` and `.predict()` are fully parallel.
+
+## Creating a LinearModel
+
+`LinearModel` lives in `datatable.models`:
+
+```python
+from datatable.models import LinearModel
+
+lm = LinearModel()
+```
+
+Parameters can be passed at construction:
+
+```python
+lm = LinearModel(
+    eta0=0.01,
+    eta_schedule="time-based",
+    lambda1=0.0,
+    lambda2=0.001,
+    nepochs=10,
+    model_type="regression",
+)
+```
+
+Or updated on an existing instance:
+
+```python
+lm.eta0 = 0.01
+lm.nepochs = 10
+```
+
+## Hyperparameters
+
+| Parameter | Default | Description |
+|---|---|---|
+| `eta0` | `0.005` | Initial learning rate. Must be positive. |
+| `eta_decay` | `0.0001` | Decay factor for `"time-based"` and `"step-based"` schedules. |
+| `eta_drop_rate` | `10.0` | Drop rate for the `"step-based"` schedule. |
+| `eta_schedule` | `"constant"` | Learning rate schedule: `"constant"`, `"time-based"`, `"step-based"`, or `"exponential"`. |
+| `lambda1` | `0.0` | L1 regularization. Non-negative. |
+| `lambda2` | `0.0` | L2 regularization. Non-negative. |
+| `nepochs` | `1` | Training epochs. Fractional values train on a partial final pass. |
+| `model_type` | `"auto"` | `"auto"`, `"binomial"`, `"multinomial"`, or `"regression"`. |
+| `negative_class` | `False` | Create a "negative" class for multinomial classification. |
+| `seed` | `0` | Seed for quasi-random data shuffling. `0` disables shuffling. |
+| `double_precision` | `False` | Use `float64` internally (doubles memory use). |
+
+### Learning Rate Schedules
+
+When `eta_schedule` is not `"constant"`, the learning rate `eta` is updated after each training iteration:
+
+| Schedule | Update rule |
+|---|---|
+| `"constant"` | `eta = eta0` |
+| `"time-based"` | `eta = eta0 / (1 + eta_decay * epoch)` |
+| `"step-based"` | `eta = eta0 * eta_decay ^ floor((1 + epoch) / eta_drop_rate)` |
+| `"exponential"` | `eta = eta0 / exp(eta_decay * epoch)` |
+
+## Training
+
+```python
+result = lm.fit(X_train, y_train)
+print(result.epoch, result.loss)
+```
+
+`X_train` is a `Frame` of shape `(nrows, ncols)` and `y_train` a `Frame` of shape `(nrows, 1)`. The `model_type` is inferred from the target column dtype when set to `"auto"`.
+
+### Early Stopping
+
+```python
+result = lm.fit(
+    X_train, y_train,
+    X_validation, y_validation,
+    nepochs_validation=1,
+    validation_error=0.01,
+    validation_average_niterations=1,
+)
+print(f"Stopped at epoch {result.epoch}, loss {result.loss:.4f}")
+```
+
+## Predicting
+
+```python
+predictions = lm.predict(X_test)
+```
+
+Returns a `Frame` of shape `(X_test.nrows, nlabels)` with predicted values or probabilities. The test frame must have the same number of columns as the training frame.
+
+## Checking Model Status
+
+```python
+lm.is_fitted()  # Returns True if the model has been trained
+```
+
+## Resetting the Model
+
+```python
+lm.reset()                        # Reset weights, keep hyperparameters
+lm.params = LinearModel().params  # Also reset hyperparameters to defaults
+```
+
+## Complete Examples
+
+<Tabs>
+  <Tab title="Regression">
+    ```python
+    import datatable as dt
+    from datatable.models import LinearModel
+
+    # Simple regression: predict y = 2*x + 1 + noise
+    train = dt.Frame({
+        "x": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0],
+        "y": [3.1, 5.0, 6.9, 9.1, 11.0, 13.2, 14.9, 17.1],
+    })
+
+    X_train = train[:, "x"]
+    y_train = train[:, "y"]
+
+    model = LinearModel(
+        eta0=0.01,
+        eta_schedule="time-based",
+        eta_decay=0.001,
+        nepochs=100,
+        model_type="regression",
+    )
+
+    result = model.fit(X_train, y_train)
+    print(f"Trained for {result.epoch} epochs")
+
+    X_test = dt.Frame({"x": [9.0, 10.0]})
+    preds = model.predict(X_test)
+    print(preds)  # Expected: ~19, ~21
+    ```
+  </Tab>
+  <Tab title="Binary classification">
+    ```python
+    import datatable as dt
+    from datatable.models import LinearModel
+
+    # Binary classification
+    train = dt.Frame({
+        "x1": [0.1, 0.9, 0.2, 0.8, 0.3, 0.7],
+        "x2": [0.4, 0.6, 0.3, 0.7, 0.2, 0.8],
+        "label": ["neg", "pos", "neg", "pos", "neg", "pos"],
+    })
+
+    X_train = train[:, ["x1", "x2"]]
+    y_train = train[:, "label"]
+
+    model = LinearModel(
+        eta0=0.05,
+        nepochs=20,
+        model_type="binomial",
+        lambda2=0.001,
+    )
+
+    model.fit(X_train, y_train)
+    print("Labels:", model.labels)
+
+    X_test = dt.Frame({"x1": [0.15, 0.85], "x2": [0.35, 0.65]})
+    preds = model.predict(X_test)
+    print(preds)  # Probabilities for each class
+    ```
+  </Tab>
+</Tabs>
+
+## When to Use LinearModel
+
+<CardGroup cols={2}>
+  <Card title="Good fit">
+    - Regression tasks with numeric targets
+    - Binary or multinomial classification with linearly separable data
+    - When you need an interpretable, coefficient-based model
+    - Large datasets where batch methods are too slow
+  </Card>
+  <Card title="Consider alternatives">
+    - Non-linear relationships in data (tree-based methods may work better)
+    - Very high-dimensional sparse text/categorical data (consider FTRL instead)
+    - Tasks that require probability calibration out of the box
+  </Card>
+</CardGroup>

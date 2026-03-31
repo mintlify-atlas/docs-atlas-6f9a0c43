@@ -1,0 +1,511 @@
+---
+title: "Datatable vs pandas"
+description: "Side-by-side comparison of common DataFrame operations in datatable and pandas."
+---
+
+Many datatable users come from a pandas background. This page maps common pandas operations to their datatable equivalents. The two libraries share similar goals but make different trade-offs: datatable emphasises **speed and large-data support** while pandas offers a **richer ecosystem** of transforms and integrations.
+
+<Note>
+In pandas there are two fundamental data structures — `Series` and `DataFrame`. In datatable there is only one: the `Frame`. Most comparisons below are between pandas `DataFrame` and datatable `Frame`.
+</Note>
+
+## Setup
+
+```python
+import pandas as pd
+import numpy as np
+from datatable import dt, f, by, join, sort, update, ifelse
+
+data = {"A": [1, 2, 3, 4, 5],
+        "B": [4, 5, 6, 7, 8],
+        "C": [7, 8, 9, 10, 11],
+        "D": [5, 7, 2, 9, -1]}
+
+DT = dt.Frame(data)   # datatable
+df = pd.DataFrame(data)  # pandas
+```
+
+## Row and Column Selection
+
+<Tabs>
+  <Tab title="datatable">
+    ```python
+    # Select a single row
+    DT[2, :]
+
+    # Select several rows by index
+    DT[[2, 3, 4], :]
+
+    # Select a slice of rows
+    DT[2:5, :]
+
+    # Select every second row
+    DT[::2, :]
+
+    # Select rows using a boolean mask
+    DT[[True, True, False, False, True], :]
+
+    # Filter on a condition
+    DT[f.A > 3, :]
+
+    # Filter with OR
+    DT[(f.A > 3) | (f.B < 5), :]
+
+    # Filter with AND
+    DT[(f.A > 3) & (f.B < 8), :]
+
+    # Select a single column by name
+    DT["A"]
+    DT[:, "A"]
+
+    # Select a column by position
+    DT[1]
+    DT[:, 1]
+
+    # Select multiple columns by name
+    DT[:, ["A", "B"]]
+
+    # Select multiple columns by position
+    DT[:, [0, 1]]
+
+    # Select columns by slice
+    DT[:, "A":"B"]
+    DT[:, 1:3]
+
+    # Select columns by boolean mask
+    DT[:, [True, False, False, True]]
+
+    # Select rows and columns together
+    DT[2:5, "A":"B"]
+    DT[2:5, :2]
+
+    # Single scalar value
+    DT[2, "A"]
+    DT[2, 0]
+    ```
+  </Tab>
+  <Tab title="pandas">
+    ```python
+    # Select a single row
+    df.loc[2]
+
+    # Select several rows by index
+    df.iloc[[2, 3, 4]]
+
+    # Select a slice of rows
+    df.iloc[2:5]
+
+    # Select every second row
+    df.iloc[::2]
+
+    # Select rows using a boolean mask
+    df.iloc[[True, True, False, False, True]]
+
+    # Filter on a condition
+    df.loc[df["A"] > 3]
+
+    # Filter with OR
+    df.loc[(df["A"] > 3) | (df["B"] < 5)]
+
+    # Filter with AND
+    df.loc[(df["A"] > 3) & (df["B"] < 8)]
+
+    # Select a single column by name
+    df["A"]
+    df.loc[:, "A"]
+
+    # Select a column by position
+    df.iloc[:, 1]
+
+    # Select multiple columns by name
+    df.loc[:, ["A", "B"]]
+
+    # Select multiple columns by position
+    df.iloc[:, [0, 1]]
+
+    # Select columns by slice
+    df.loc[:, "A":"B"]
+    df.iloc[:, 1:3]
+
+    # Select columns by boolean mask
+    df.loc[:, [True, False, False, True]]
+
+    # Select rows and columns together
+    df.loc[2:5, "A":"B"]
+    df.iloc[2:5, :2]
+
+    # Single scalar value
+    df.at[2, "A"]
+    df.iat[2, 0]
+    ```
+  </Tab>
+</Tabs>
+
+<Note>
+In pandas, filtered results keep the original row index numbers. In datatable there is no row index — the displayed numbers are positional and always restart from 0 after filtering.
+</Note>
+
+## Adding and Updating Columns
+
+<Tabs>
+  <Tab title="datatable">
+    ```python
+    # Add a new column with a scalar
+    DT["new_col"] = 2
+    DT[:, update(new_col=2)]
+
+    # Add a new column from a range
+    DT["new_col"] = range(DT.nrows)
+
+    # Update a single value
+    DT[2, "new_col"] = 200
+
+    # Update an entire column
+    DT["A"] = 5
+    DT[:, update(A=5)]
+
+    # Update multiple columns
+    DT[:, "A":"C"] = np.arange(15).reshape(-1, 3)
+    ```
+  </Tab>
+  <Tab title="pandas">
+    ```python
+    # Add a new column with a scalar
+    df["new_col"] = 2
+    df = df.assign(new_col=2)
+
+    # Add a new column from a range
+    df["new_col"] = range(len(df))
+
+    # Update a single value
+    df.at[2, "new_col"] = 200
+
+    # Update an entire column
+    df["A"] = 5
+    df = df.assign(A=5)
+
+    # Update multiple columns
+    df.loc[:, "A":"C"] = np.arange(15).reshape(-1, 3)
+    ```
+  </Tab>
+</Tabs>
+
+<Note>
+`update()` in datatable operates **in-place** — no reassignment to `DT` is needed.
+</Note>
+
+## Renaming Columns
+
+<Tabs>
+  <Tab title="datatable">
+    ```python
+    # Rename a single column
+    DT.names = {"A": "col_A"}
+
+    # Rename multiple columns
+    DT.names = {"A": "col_A", "B": "col_B"}
+
+    # Rename and select simultaneously with a dict in j
+    DT[:, {"A": f.A, "box": f.B, "C": f.C, "D": f.D * 2}]
+    ```
+  </Tab>
+  <Tab title="pandas">
+    ```python
+    # Rename a single column
+    df = df.rename(columns={"A": "col_A"})
+
+    # Rename multiple columns
+    df = df.rename(columns={"A": "col_A", "B": "col_B"})
+    ```
+  </Tab>
+</Tabs>
+
+## Deleting Columns
+
+<Tabs>
+  <Tab title="datatable">
+    ```python
+    # Delete a single column
+    del DT["B"]
+
+    # Alternative — remove in j
+    DT = DT[:, f[:].remove(f.B)]
+
+    # Delete multiple columns
+    del DT[:, ["B", "C"]]
+    DT = DT[:, f[:].remove([f.B, f.C])]
+    ```
+  </Tab>
+  <Tab title="pandas">
+    ```python
+    # Delete a single column
+    del df["B"]
+
+    # Alternative
+    df = df.drop("B", axis=1)
+
+    # Delete multiple columns
+    df = df.drop(["B", "C"], axis=1)
+    ```
+  </Tab>
+</Tabs>
+
+## Sorting
+
+<Tabs>
+  <Tab title="datatable">
+    ```python
+    # Sort ascending
+    DT.sort("A")
+    DT[:, :, sort("A")]
+
+    # Sort descending
+    DT.sort(-f.A)
+    DT[:, :, sort("A", reverse=True)]
+
+    # Sort by multiple columns ascending
+    DT.sort("A", "C")
+
+    # Sort by multiple columns descending
+    DT.sort(-f.A, -f.C)
+
+    # Mixed directions (A asc, C desc)
+    DT.sort(f.A, -f.C)
+    DT[:, :, sort("A", "C", reverse=[False, True])]
+    ```
+  </Tab>
+  <Tab title="pandas">
+    ```python
+    # Sort ascending
+    df.sort_values("A")
+
+    # Sort descending
+    df.sort_values("A", ascending=False)
+
+    # Sort by multiple columns ascending
+    df.sort_values(["A", "C"])
+
+    # Sort by multiple columns descending
+    df.sort_values(["A", "C"], ascending=[False, False])
+
+    # Mixed directions
+    df.sort_values(["A", "C"], ascending=[True, False])
+    ```
+  </Tab>
+</Tabs>
+
+<Note>
+By default, pandas places `NaN` values **last** in sorted output. datatable places `NA` values **first**.
+</Note>
+
+## Grouping and Aggregation
+
+```python
+data = {"a": [1, 1, 2, 1, 2],
+        "b": [2, 20, 30, 2, 4],
+        "c": [3, 30, 50, 33, 50]}
+DT = dt.Frame(data)
+df = pd.DataFrame(data)
+```
+
+<Tabs>
+  <Tab title="datatable">
+    ```python
+    # Group by 'a', sum all other columns
+    DT[:, dt.sum(f[:]), by("a")]
+
+    # Group by 'a' and 'b', sum 'c'
+    DT[:, dt.sum(f.c), by("a", "b")]
+
+    # Row count per group
+    DT[:, dt.count(), by("a")]
+
+    # Multiple aggregations
+    DT[:, {"b": dt.sum(f.b), "c": dt.mean(f.c)}, by("a")]
+
+    # First row per group
+    DT[0, :, by("a")]
+
+    # Last row per group
+    DT[-1, :, by("a")]
+
+    # First two rows per group
+    DT[:2, :, by("a")]
+
+    # Per-group transform (keeps original row order)
+    DT[:, update(min_b=dt.min(f.b)), by("a")]
+
+    # Nested computation without a temp column
+    DT1[:, {"revenue": dt.sum(f.item_price * f.item_sold)}, by("shop")]
+    ```
+  </Tab>
+  <Tab title="pandas">
+    ```python
+    # Group by 'a', sum all other columns
+    df.groupby("a").agg("sum")
+
+    # Group by 'a' and 'b', sum 'c'
+    df.groupby(["a", "b"]).agg("sum")
+
+    # Row count per group
+    df.groupby("a").size()
+
+    # Multiple aggregations
+    df.groupby("a").agg({"b": "sum", "c": "mean"})
+
+    # First row per group
+    df.groupby("a").first()
+
+    # Last row per group
+    df.groupby("a").last()
+
+    # First two rows per group
+    df.groupby("a").head(2)
+
+    # Per-group transform
+    grouping = df.groupby("a")["b"].transform("min")
+    df.assign(min_b=grouping)
+
+    # Requires creating an intermediate column first
+    df1["revenue"] = df1["item_price"] * df1["item_sold"]
+    df1.groupby("shop")["revenue"].sum().reset_index()
+    ```
+  </Tab>
+</Tabs>
+
+## Concatenation
+
+<Tabs>
+  <Tab title="datatable">
+    ```python
+    # Stack frames vertically (row-bind)
+    dt.rbind(DT1, DT2)
+
+    # Stack frames horizontally (column-bind)
+    dt.cbind([DT1, DT2, DT3])
+
+    # Vertical bind with mismatched columns (fills with NA)
+    dt.rbind([DT1, DT2, DT3], force=True)
+    ```
+  </Tab>
+  <Tab title="pandas">
+    ```python
+    # Stack frames vertically
+    pd.concat([df1, df2], axis=0)
+
+    # Stack frames horizontally
+    pd.concat([df1, df2, df3], axis=1)
+
+    # Vertical concat, mismatched columns (fills with NaN)
+    pd.concat([df1, df2, df3], axis=0)
+    ```
+  </Tab>
+</Tabs>
+
+<Note>
+`rbind()` and `cbind()` also exist as Frame methods and operate in-place: `DT.rbind(DT2)`.
+</Note>
+
+## Joins
+
+<Tabs>
+  <Tab title="datatable">
+    ```python
+    DT1 = dt.Frame(df1)
+    DT2 = dt.Frame(df2)
+
+    # The joining frame must be keyed on the join column
+    # and that column must contain unique values
+    DT2.key = "x"
+
+    # Left join
+    DT1[:, :, join(DT2)]
+
+    # Select specific columns from both frames
+    DT1[:, [f.x, f.y, f.v, g.foo], join(DT2)]
+    ```
+  </Tab>
+  <Tab title="pandas">
+    ```python
+    # Left join — no key required
+    df1.merge(df2, on="x", how="left")
+
+    # Inner join
+    df1.merge(df2, on="x", how="inner")
+
+    # Right join
+    df1.merge(df2, on="x", how="right")
+    ```
+  </Tab>
+</Tabs>
+
+<Warning>
+datatable's `join()` currently supports **left outer joins only**. The joining frame must be keyed, the key column must have unique values, and the join column must share the same name in both frames.
+</Warning>
+
+## If-Then-Else
+
+<Tabs>
+  <Tab title="datatable">
+    ```python
+    from datatable import ifelse
+
+    DT = dt.Frame({"AAA": [4, 5, 6, 7], "BBB": [10, 20, 30, 40]})
+    DT["logic"] = ifelse(f.AAA > 5, "high", "low")
+
+    # ifelse also supports multiple conditions (chained)
+    conditions = ifelse(f.size == "S", f.weight * 1.5,
+                        f.size == "M", f.weight * 1.25,
+                        f.size == "L", f.weight,
+                        None)
+    ```
+  </Tab>
+  <Tab title="pandas">
+    ```python
+    import numpy as np
+
+    df = pd.DataFrame({"AAA": [4, 5, 6, 7], "BBB": [10, 20, 30, 40]})
+    df["logic"] = np.where(df["AAA"] > 5, "high", "low")
+    ```
+  </Tab>
+</Tabs>
+
+## Reading CSV
+
+<Tabs>
+  <Tab title="datatable">
+    ```python
+    import datatable as dt
+
+    DT = dt.fread("data.csv")
+
+    # fread auto-detects types, handles large files via multi-threading,
+    # and is significantly faster than pd.read_csv for large files
+    ```
+  </Tab>
+  <Tab title="pandas">
+    ```python
+    import pandas as pd
+
+    df = pd.read_csv("data.csv")
+    ```
+  </Tab>
+</Tabs>
+
+## When to Use Each
+
+<CardGroup cols={2}>
+  <Card title="Choose datatable when...">
+    - Your dataset is large (millions to billions of rows)
+    - Read/filter/groupby speed is the bottleneck
+    - You are working in a memory-constrained environment
+    - You need fast CSV parsing (`fread`)
+  </Card>
+  <Card title="Choose pandas when...">
+    - You need rich reshaping functions (`melt`, `pivot_table`, `wide_to_long`)
+    - You work heavily with time series or datetime operations
+    - You need rolling/expanding window aggregations
+    - You rely on `apply()` with custom Python functions
+    - Your downstream libraries expect a pandas DataFrame
+  </Card>
+</CardGroup>

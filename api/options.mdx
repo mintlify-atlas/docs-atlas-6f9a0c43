@@ -1,0 +1,213 @@
+---
+title: "Configuration Options"
+description: "Runtime configuration for datatable via `dt.options`. Control threading, display, file reading, progress reporting, and debugging behavior."
+---
+
+`dt.options` is a namespace object that stores all datatable runtime configuration. You can read any option by attribute access and set it by assignment. Changes take effect immediately and persist for the lifetime of the Python session.
+
+```python
+import datatable as dt
+
+# Read a value
+print(dt.options.nthreads)
+
+# Set a value
+dt.options.nthreads = 4
+```
+
+You can also call `dt.options.describe()` to print all current values with their defaults and documentation.
+
+## Context manager
+
+Use `dt.options.context()` to temporarily change options inside a `with` block. The original values are restored automatically when the block exits, even if an exception is raised.
+
+```python
+with dt.options.context(nthreads=1):
+    result = DT[:, dt.sum(f.value)]  # runs single-threaded
+
+# nthreads is back to its previous value here
+```
+
+## Resetting options
+
+```python
+# Reset a single option to its default
+del dt.options.nthreads
+
+# Reset all options at once
+dt.options.reset()
+```
+
+---
+
+## `nthreads`
+
+<ParamField path="nthreads" type="int">
+  Number of threads used for all parallel computations. Defaults to the number of logical CPU cores reported by the operating system.
+
+  - Set to `1` to force single-threaded execution.
+  - Set to `0` to restore the default (hardware concurrency).
+  - Negative values request fewer threads than the maximum (e.g., `-2` means "all cores minus 2").
+</ParamField>
+
+```python
+dt.options.nthreads      # read current value
+dt.options.nthreads = 8  # use 8 threads
+dt.options.nthreads = 0  # restore default
+```
+
+---
+
+## `display` group
+
+Options that control how frames are rendered in the console or a notebook.
+
+<ParamField path="display.allow_unicode" type="bool">
+  Whether unicode characters are allowed in frame display output. Disable on terminals that cannot render unicode.
+</ParamField>
+
+<ParamField path="display.head_nrows" type="int">
+  Number of rows shown at the top of a truncated frame view.
+</ParamField>
+
+<ParamField path="display.tail_nrows" type="int">
+  Number of rows shown at the bottom of a truncated frame view.
+</ParamField>
+
+<ParamField path="display.max_nrows" type="int">
+  Row count threshold above which the frame display is truncated. Frames with fewer rows are displayed in full.
+</ParamField>
+
+<ParamField path="display.max_column_width" type="int">
+  Maximum character width of any column in the rendered output. Wider values are truncated with an ellipsis.
+</ParamField>
+
+<ParamField path="display.interactive" type="bool">
+  Enable or disable the interactive (scrollable) frame viewer. When enabled, large frames are shown in a terminal pager.
+</ParamField>
+
+<ParamField path="display.use_colors" type="bool">
+  Whether ANSI color codes are used in console output. Disable when piping output to a file or a tool that does not understand ANSI.
+</ParamField>
+
+```python
+dt.options.display.max_nrows        = 30
+dt.options.display.max_column_width = 50
+dt.options.display.use_colors       = False
+```
+
+---
+
+## `frame` group
+
+Options that control default column naming for new frames.
+
+<ParamField path="frame.names_auto_prefix" type="str">
+  Prefix used when auto-generating column names. Defaults to `"C"`, producing names like `C0`, `C1`, `C2`, …
+</ParamField>
+
+<ParamField path="frame.names_auto_index" type="int">
+  Starting index for auto-generated column names. Defaults to `0`.
+</ParamField>
+
+```python
+dt.options.frame.names_auto_prefix = "col"
+dt.options.frame.names_auto_index  = 1
+# New unnamed columns will be named col1, col2, ...
+```
+
+---
+
+## `fread` group
+
+Options that affect the behavior of `dt.fread()`.
+
+<ParamField path="fread.parse_dates" type="bool">
+  Whether `fread` should automatically recognize and parse date fields. Disable to keep date-like columns as strings.
+</ParamField>
+
+<ParamField path="fread.parse_times" type="bool">
+  Whether `fread` should automatically recognize and parse time/timestamp fields.
+</ParamField>
+
+<ParamField path="fread.log.escape_unicode" type="bool">
+  Whether unicode characters in `fread` log messages are escaped.
+</ParamField>
+
+```python
+dt.options.fread.parse_dates = False  # keep date columns as strings
+dt.options.fread.parse_times = False
+```
+
+---
+
+## `progress` group
+
+Options controlling the progress bar shown during long-running operations.
+
+<ParamField path="progress.enabled" type="bool">
+  Master switch for progress reporting. Set to `False` to suppress all progress bars.
+</ParamField>
+
+<ParamField path="progress.min_duration" type="float">
+  Minimum task duration (in seconds) before a progress bar is displayed. Tasks shorter than this threshold show no progress bar.
+</ParamField>
+
+<ParamField path="progress.updates_per_second" type="float">
+  How many times per second the progress bar is redrawn.
+</ParamField>
+
+<ParamField path="progress.clear_on_success" type="bool">
+  Whether to erase the progress bar from the terminal once a task finishes successfully.
+</ParamField>
+
+<ParamField path="progress.allow_interruption" type="bool">
+  Whether long-running datatable tasks can be interrupted with `Ctrl+C`.
+</ParamField>
+
+<ParamField path="progress.callback" type="callable | None">
+  A custom progress-reporting function. When set, datatable calls this function instead of drawing the built-in progress bar. The function receives a progress value in `[0, 1]`.
+</ParamField>
+
+```python
+dt.options.progress.enabled       = False  # silence all progress bars
+dt.options.progress.min_duration  = 2.0    # only show for tasks > 2 s
+dt.options.progress.clear_on_success = True
+```
+
+---
+
+## `debug` group
+
+Options for logging internal datatable operations, useful for performance profiling and troubleshooting.
+
+<ParamField path="debug.enabled" type="bool">
+  Enable or disable debug logging. When `True`, datatable logs each internal function call.
+</ParamField>
+
+<ParamField path="debug.report_args" type="bool">
+  Whether to include function/method arguments in debug log messages.
+</ParamField>
+
+<ParamField path="debug.arg_max_size" type="int">
+  Maximum number of characters printed per argument value in debug log messages.
+</ParamField>
+
+<ParamField path="debug.logger" type="object | None">
+  A custom logger object. Must have a `.debug(msg)` method. When `None`, debug output is written to `sys.stdout`.
+</ParamField>
+
+```python
+import logging
+
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger("datatable")
+
+dt.options.debug.enabled     = True
+dt.options.debug.logger      = logger
+dt.options.debug.report_args = True
+```
+
+<Note>
+Enabling `debug.enabled` can produce a large volume of output during normal operations. It is recommended only for targeted troubleshooting.
+</Note>

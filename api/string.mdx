@@ -1,0 +1,127 @@
+---
+title: "String Module"
+description: "String manipulation functions for datatable string columns, available via `dt.str`."
+---
+
+The `datatable.str` module provides functions that operate on string (`str32` / `str64`) columns inside datatable expressions. Functions accept `FExpr` arguments and return `FExpr` results, composing naturally with `f` selectors and other datatable operations.
+
+```python
+import datatable as dt
+from datatable import f
+
+DT = dt.Frame(name=["Alice", "Bob", "Charlie"])
+
+# Compute string lengths
+DT[:, dt.str.len(f.name)]
+```
+
+<Note>
+Functions in `dt.str` operate lazily. They return an `FExpr` that is only evaluated when used inside a `DT[rows, cols]` expression.
+</Note>
+
+## Functions
+
+### `dt.str.len(column)`
+
+Compute the length (number of characters) of each string value in `column`.
+
+**Parameters**
+
+<ParamField path="column" type="FExpr[str]">
+  A string column expression.
+</ParamField>
+
+**Returns** `FExpr[int64]` — an integer column containing the character count for each row. NA strings produce NA output.
+
+---
+
+### `dt.str.slice(col, start, stop, step=1)`
+
+Apply the slice `[start:stop:step]` to each string value in `col`. You can also write `f.col[start:stop:step]` as a shorthand.
+
+**Parameters**
+
+<ParamField path="col" type="FExpr[str]">
+  The string column to slice.
+</ParamField>
+
+<ParamField path="start" type="int | None">
+  Start index of the slice (inclusive). Negative indices count from the end. `None` means the beginning of the string.
+</ParamField>
+
+<ParamField path="stop" type="int | None">
+  Stop index of the slice (exclusive). Negative indices count from the end. `None` means the end of the string.
+</ParamField>
+
+<ParamField path="step" type="int" default="1">
+  Step size. Defaults to `1`.
+</ParamField>
+
+**Returns** `FExpr[str]` — a string column with the sliced values.
+
+---
+
+### `dt.str.split_into_nhot(frame, sep=",", sort=False)`
+
+Split and n-hot encode a single-column string frame. Each value is split on `sep`, whitespace is trimmed, and the resulting labels become boolean columns in the output frame.
+
+**Parameters**
+
+<ParamField path="frame" type="Frame">
+  A single-column frame with `str32` or `str64` stype.
+</ParamField>
+
+<ParamField path="sep" type="str" default='","'>
+  Single-character delimiter to split on.
+</ParamField>
+
+<ParamField path="sort" type="bool" default="false">
+  If `True`, output columns are sorted alphabetically by label. Due to parallelization, column order is otherwise not guaranteed.
+</ParamField>
+
+**Returns** `Frame` — one boolean column per unique label, one row per input row.
+
+<Note>
+`split_into_nhot` operates on a full `Frame` (not a lazy `FExpr`). Pass the single-column frame directly to this function, not inside a `DT[rows, cols]` expression.
+</Note>
+
+## Examples
+
+### Compute string lengths and filter
+
+```python
+import datatable as dt
+from datatable import f
+
+DT = dt.Frame(word=["cat", "elephant", "ox", None, "rhinoceros"])
+
+# Add a length column, then keep only words longer than 3 characters
+result = DT[:, {"word": f.word, "length": dt.str.len(f.word)}]
+result = result[f.length > 3, :]
+```
+
+### Slice the first five characters of each string
+
+```python
+import datatable as dt
+from datatable import f
+
+DT = dt.Frame(A=["apples", "bananas", "cherries", "dates"])
+
+# Using dt.str.slice
+DT[:, dt.str.slice(f.A, None, 5)]
+
+# Equivalent shorthand via f-expression subscript
+DT[:, f.A[:5]]
+```
+
+### N-hot encode a multi-label column
+
+```python
+import datatable as dt
+
+DT = dt.Frame(tags=["python,data", "data,ml", "python,ml,deep-learning"])
+
+# Produce one boolean column per unique tag
+encoded = dt.str.split_into_nhot(DT[:, "tags"], sep=",", sort=True)
+```

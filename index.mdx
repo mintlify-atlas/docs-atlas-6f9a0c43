@@ -1,97 +1,87 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "Datatable — High-Performance Python DataFrames"
+description: "A Python library for fast, memory-efficient manipulation of 2-dimensional tabular data, built for big data on a single machine."
 ---
 
-## Setting up
+Datatable is a Python package for manipulating 2-dimensional tabular data structures (DataFrames). Built with a native C++ core, it emphasizes speed and big data support — processing datasets up to 100GB on a single node. The API is inspired by R's `data.table` and integrates seamlessly with pandas, numpy, and pyarrow.
 
-Get your documentation site up and running in minutes.
-
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
-
-## Make it yours
-
-Design a docs site that looks great and empowers your users.
-
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Install datatable and run your first data operations in minutes.
   </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
+  <Card title="Core Concepts" icon="book" href="/concepts/frame">
+    Understand Frames, f-expressions, and the DT[i, j, by] syntax.
   </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
+  <Card title="Working with Data" icon="table" href="/guides/selecting-filtering">
+    Filter, transform, group, join, and read/write data.
   </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
+  <Card title="API Reference" icon="code" href="/api/frame">
+    Full API documentation for all classes and functions.
   </Card>
-</Columns>
+</CardGroup>
 
-## Create beautiful pages
+## Get started in 3 steps
 
-Everything you need to create world-class documentation.
+<Steps>
+  <Step title="Install datatable">
+    Install the package from PyPI using pip:
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+    ```bash
+    pip install datatable
+    ```
+  </Step>
+  <Step title="Load your data">
+    Create a Frame from a CSV file, Python dict, numpy array, or pandas DataFrame:
 
-## Need inspiration?
+    ```python
+    import datatable as dt
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+    # Read a CSV file (fast, auto-detects format)
+    DT = dt.fread("data.csv")
+
+    # Or create from a dictionary
+    DT = dt.Frame({"A": [1, 2, 3, 4, 5], "B": [10.5, 20.1, 30.3, 40.0, 50.7]})
+    print(DT)
+    ```
+  </Step>
+  <Step title="Query and transform">
+    Use the expressive `DT[i, j, by(...)]` syntax to filter, select, and aggregate:
+
+    ```python
+    from datatable import f, by
+
+    # Select rows where A > 2, compute B * 2
+    result = DT[f.A > 2, f.B * 2]
+
+    # Group by a column and compute mean
+    summary = DT[:, dt.mean(f.B), by(f.A)]
+    ```
+  </Step>
+</Steps>
+
+## Why datatable?
+
+<CardGroup cols={2}>
+  <Card title="Blazing fast" icon="bolt">
+    Native C++ implementation with multi-threaded processing. Sort, group, and join hundreds of millions of rows in seconds.
+  </Card>
+  <Card title="Big data support" icon="database">
+    Memory-mapped datasets let you work on files larger than RAM transparently, without loading everything into memory.
+  </Card>
+  <Card title="Expressive syntax" icon="brackets-curly">
+    The `DT[i, j, by(...)]` query syntax is concise and powerful — filter rows, select columns, and aggregate in a single expression.
+  </Card>
+  <Card title="Pandas compatible" icon="shuffle">
+    Convert to/from pandas DataFrames, numpy arrays, and pyarrow tables. Drop-in complement for your existing workflow.
+  </Card>
+  <Card title="Fast I/O" icon="file-import">
+    `fread()` automatically detects CSV format, handles compressed files, reads URLs, and is orders of magnitude faster than pandas `read_csv`.
+  </Card>
+  <Card title="Built-in ML models" icon="brain">
+    Includes FTRL online learning and LinearModel for classification and regression — no additional libraries required.
+  </Card>
+</CardGroup>
+
+<Note>
+  datatable requires **Python 3.6+** (64-bit) and **pip 20.3+**. Pre-built wheels are available for macOS, Linux, and Windows.
+</Note>

@@ -1,0 +1,147 @@
+---
+title: "Math Module"
+description: "Mathematical functions for use in datatable expressions. Apply element-wise math operations to Frame columns via `dt.math`."
+---
+
+The `datatable.math` module provides a comprehensive set of mathematical functions that operate on Frame columns inside datatable expressions. All functions accept `FExpr` arguments and return `FExpr` results, so they compose naturally with the `f` selector and other datatable operations.
+
+```python
+import datatable as dt
+from datatable import f
+
+DT = dt.Frame(x=[0.0, 0.5, 1.0, 1.5, 2.0])
+
+# Apply a math function inside a DT expression
+DT[:, dt.math.sin(f.x)]
+```
+
+<Note>
+All `dt.math` functions operate lazily — they produce an `FExpr` that is evaluated when the expression is used in a `DT[rows, cols]` context. They do not operate on plain Python numbers directly.
+</Note>
+
+## Trigonometric functions
+
+| Function | Description |
+|---|---|
+| `dt.math.sin(x)` | Trigonometric sine of `x`. |
+| `dt.math.cos(x)` | Trigonometric cosine of `x`. |
+| `dt.math.tan(x)` | Trigonometric tangent of `x`. |
+| `dt.math.arcsin(x)` | Inverse sine of `x` (result in radians). |
+| `dt.math.arccos(x)` | Inverse cosine of `x` (result in radians). |
+| `dt.math.arctan(x)` | Inverse tangent of `x` (result in radians). |
+| `dt.math.atan2(y, x)` | Inverse tangent of `y/x`, accounting for quadrant. |
+| `dt.math.hypot(x, y)` | Euclidean norm `sqrt(x² + y²)`. |
+| `dt.math.deg2rad(x)` | Convert degrees to radians. |
+| `dt.math.rad2deg(x)` | Convert radians to degrees. |
+
+## Hyperbolic functions
+
+| Function | Description |
+|---|---|
+| `dt.math.sinh(x)` | Hyperbolic sine of `x`. |
+| `dt.math.cosh(x)` | Hyperbolic cosine of `x`. |
+| `dt.math.tanh(x)` | Hyperbolic tangent of `x`. |
+| `dt.math.arsinh(x)` | Inverse hyperbolic sine of `x`. |
+| `dt.math.arcosh(x)` | Inverse hyperbolic cosine of `x`. |
+| `dt.math.artanh(x)` | Inverse hyperbolic tangent of `x`. |
+
+## Exponential, logarithmic, and power functions
+
+| Function | Description |
+|---|---|
+| `dt.math.exp(x)` | Natural exponent `eˣ`. |
+| `dt.math.exp2(x)` | Base-2 exponent `2ˣ`. |
+| `dt.math.expm1(x)` | `eˣ − 1`, accurate for small `x`. |
+| `dt.math.log(x)` | Natural logarithm `ln(x)`. |
+| `dt.math.log10(x)` | Base-10 logarithm. |
+| `dt.math.log2(x)` | Base-2 logarithm. |
+| `dt.math.log1p(x)` | `ln(1 + x)`, accurate for small `x`. |
+| `dt.math.logaddexp(x, y)` | `ln(eˣ + eʸ)`. |
+| `dt.math.logaddexp2(x, y)` | `log₂(2ˣ + 2ʸ)`. |
+| `dt.math.sqrt(x)` | Square root `√x`. |
+| `dt.math.square(x)` | Square `x²`. |
+| `dt.math.cbrt(x)` | Cube root `∛x`. |
+| `dt.math.pow(x, a)` | Power `xᵃ`. |
+
+## Special mathematical functions
+
+| Function | Description |
+|---|---|
+| `dt.math.erf(x)` | Gauss error function `erf(x)`. |
+| `dt.math.erfc(x)` | Complementary error function `1 − erf(x)`. |
+| `dt.math.gamma(x)` | Euler gamma function `Γ(x)`. |
+| `dt.math.lgamma(x)` | Natural log of the gamma function `ln(Γ(x))`. |
+
+## Floating-point and rounding functions
+
+| Function | Description |
+|---|---|
+| `dt.math.abs(x)` | Absolute value of `x`. |
+| `dt.math.fabs(x)` | Absolute value of `x`, returned as float. |
+| `dt.math.ceil(x)` | Smallest integer not less than `x`. |
+| `dt.math.floor(x)` | Largest integer not greater than `x`. |
+| `dt.math.rint(x)` | Round `x` to the nearest integer. |
+| `dt.math.round(x)` | Round `x` to the nearest integer (alias for `rint`). |
+| `dt.math.trunc(x)` | Truncate `x` towards zero. |
+| `dt.math.sign(x)` | Sign of `x` as a float (−1.0, 0.0, or 1.0). |
+| `dt.math.signbit(x)` | Sign of `x` as a boolean (`True` if negative). |
+| `dt.math.copysign(x, y)` | Magnitude of `x` with the sign of `y`. |
+| `dt.math.fmod(x, y)` | Floating-point remainder of `x / y`. |
+| `dt.math.ldexp(x, n)` | Compute `x · 2ⁿ`. |
+| `dt.math.isfinite(x)` | `True` if `x` is finite. |
+| `dt.math.isinf(x)` | `True` if `x` is positive or negative infinity. |
+| `dt.math.isna(x)` | `True` if `x` is NA / NaN. |
+| `dt.math.isclose(x, y)` | `True` if `x ≈ y` within a tolerance. |
+
+## Mathematical constants
+
+| Constant | Value | Description |
+|---|---|---|
+| `dt.math.e` | 2.718281828… | Euler's number. |
+| `dt.math.pi` | 3.141592653… | The ratio of a circle's circumference to its diameter. |
+| `dt.math.tau` | 6.283185307… | Equal to `2π`. |
+| `dt.math.golden` | 1.618033988… | The golden ratio `φ`. |
+| `dt.math.inf` | `∞` | Positive infinity. |
+| `dt.math.nan` | NaN | Not-a-number. |
+
+## Examples
+
+### Compute unit-circle coordinates
+
+```python
+import datatable as dt
+from datatable import f
+
+DT = dt.Frame(angle_deg=[0, 30, 45, 60, 90, 120, 180])
+
+result = DT[:, {
+    "angle_deg": f.angle_deg,
+    "angle_rad": dt.math.deg2rad(f.angle_deg),
+    "sin": dt.math.sin(dt.math.deg2rad(f.angle_deg)),
+    "cos": dt.math.cos(dt.math.deg2rad(f.angle_deg)),
+}]
+```
+
+### Normalize a column with log scaling
+
+```python
+import datatable as dt
+from datatable import f
+
+DT = dt.Frame(value=[1, 10, 100, 1000, 10000])
+
+# Log-normalize to [0, 1] range
+DT[:, dt.math.log10(f.value) / dt.math.log10(f.value).max()]
+```
+
+### Filter rows using floating-point checks
+
+```python
+import datatable as dt
+from datatable import f
+
+DT = dt.Frame(x=[1.0, float("inf"), float("nan"), -2.5, None])
+
+# Keep only rows with finite, non-NA values
+DT[dt.math.isfinite(f.x) & ~dt.math.isna(f.x), :]
+```

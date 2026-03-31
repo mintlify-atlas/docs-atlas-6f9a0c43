@@ -1,0 +1,197 @@
+---
+title: "FTRL Model"
+description: "Online learning with the Follow the Regularized Leader (FTRL-Proximal) algorithm for classification and regression in datatable."
+---
+
+The FTRL model is datatable's implementation of the **FTRL-Proximal** online learning algorithm. It was originally designed for binomial logistic regression at scale and is well-suited for high-dimensional sparse data. The model is fully parallel, using the [Hogwild](https://people.eecs.berkeley.edu/~brecht/papers/hogwildTR.pdf) approach for parallelization.
+
+<Note>
+Multinomial classification and regression for continuous targets are implemented experimentally and may produce less reliable results than the primary binomial mode.
+</Note>
+
+## How FTRL Works
+
+FTRL-Proximal is an online learning algorithm — it updates model weights incrementally as data arrives, making it memory-efficient for very large datasets. It employs a **hashing trick** to vectorize features:
+
+- Boolean and integer values are hashed with an identity function.
+- Float values are hashed by trimming mantissa bits (controlled by `mantissa_nbits`) and interpreting the result as a 64-bit unsigned integer.
+- Strings are hashed with the 64-bit Murmur2 function.
+- The final hash is combined with the hashed feature name and taken modulo `nbins`.
+
+This means the model can handle any combination of numeric, temporal, and string columns without explicit feature encoding.
+
+## Creating an FTRL Model
+
+The `Ftrl` class lives in `datatable.models`:
+
+```python
+from datatable.models import Ftrl
+
+ftrl_model = Ftrl()
+```
+
+You can set hyperparameters at construction time:
+
+```python
+ftrl_model = Ftrl(alpha=0.1, nbins=100_000, nepochs=5)
+```
+
+Or update them on an existing instance:
+
+```python
+ftrl_model.alpha = 0.1
+ftrl_model.nbins = 100_000
+```
+
+## Hyperparameters
+
+| Parameter | Default | Description |
+|---|---|---|
+| `alpha` | `0.005` | Learning rate (α in the FTRL-Proximal algorithm). Must be positive. |
+| `beta` | `1.0` | β in the FTRL-Proximal algorithm. Must be non-negative. |
+| `lambda1` | `0.0` | L1 regularization parameter. Non-negative. |
+| `lambda2` | `0.0` | L2 regularization parameter. Non-negative. |
+| `nbins` | `1_000_000` | Number of hash bins for the hashing trick. Larger values reduce hash collisions. |
+| `mantissa_nbits` | `10` | Number of mantissa bits used when hashing floats (0–52). |
+| `nepochs` | `1` | Number of training epochs. Accepts fractional values. |
+| `interactions` | `None` | Feature interaction pairs/groups to add as additional features. |
+| `model_type` | `"auto"` | `"auto"`, `"binomial"`, `"multinomial"`, or `"regression"`. |
+| `negative_class` | `False` | Whether to create a "negative" class for multinomial classification. |
+| `double_precision` | `False` | Use `float64` internally (doubles memory footprint). |
+
+## Training
+
+Use `.fit()` to train the model. `X_train` must be a datatable `Frame` of shape `(nrows, ncols)` and `y_train` a `Frame` of shape `(nrows, 1)`. Supported column types for `X_train`: `bool`, `int`, `real`, `str`.
+
+```python
+result = ftrl_model.fit(X_train, y_train)
+print(result.epoch, result.loss)
+```
+
+### Early Stopping
+
+Pass a validation set to enable early stopping. Training halts when the relative validation error fails to improve by `validation_error` within `nepochs_validation` epochs.
+
+```python
+result = ftrl_model.fit(
+    X_train, y_train,
+    X_validation, y_validation,
+    nepochs_validation=1,
+    validation_error=0.01,
+    validation_average_niterations=1,
+)
+print(f"Stopped at epoch {result.epoch}, loss {result.loss:.4f}")
+```
+
+## Predicting
+
+```python
+predictions = ftrl_model.predict(X_test)
+```
+
+`predict()` returns a `Frame` of shape `(X_test.nrows, nlabels)` with predicted probabilities for each label. The test frame must have the same number of columns as the training frame.
+
+## Feature Importances
+
+After training, per-feature weight contributions are accumulated. Access them as:
+
+```python
+fi = ftrl_model.feature_importances
+# fi is a Frame of shape (nfeatures, 2): feature name + importance in [0, 1]
+print(fi)
+```
+
+## Feature Interactions
+
+You can add synthetic cross-features by specifying `interactions` — a list of column-name groups. Each group becomes a single hashed interaction feature.
+
+```python
+ftrl_model.interactions = [["C0", "C1", "C3"], ["C2", "C5"]]
+```
+
+This creates two additional features: `C0:C1:C3` and `C2:C5`. Interactions **must** be set before calling `.fit()` and cannot be changed once the model is trained.
+
+## Resetting the Model
+
+Reset learned weights while keeping the current hyperparameters:
+
+```python
+ftrl_model.reset()
+```
+
+To also restore all hyperparameters to their defaults:
+
+```python
+ftrl_model.params = Ftrl().params
+```
+
+## Complete Binary Classification Example
+
+<Steps>
+  <Step title="Prepare data">
+    ```python
+    import datatable as dt
+    from datatable import f
+    from datatable.models import Ftrl
+
+    # Synthetic binary classification dataset
+    data = dt.Frame({
+        "feature1": [0.1, 0.4, 0.9, 0.2, 0.8, 0.3, 0.7, 0.6],
+        "feature2": [1, 0, 1, 0, 1, 0, 1, 0],
+        "label":    ["spam", "ham", "spam", "ham",
+                     "spam", "ham", "spam", "ham"],
+    })
+
+    X = data[:, ["feature1", "feature2"]]
+    y = data[:, "label"]
+
+    # Train / test split
+    X_train, X_test = X[:6, :], X[6:, :]
+    y_train, y_test = y[:6, :], y[6:, :]
+    ```
+  </Step>
+
+  <Step title="Create and train the model">
+    ```python
+    model = Ftrl(
+        alpha=0.01,
+        lambda1=0.0,
+        lambda2=1.0,
+        nbins=1_000_000,
+        nepochs=10,
+        model_type="binomial",
+    )
+
+    result = model.fit(X_train, y_train)
+    print(f"Training complete — epoch: {result.epoch}, loss: {result.loss}")
+    ```
+  </Step>
+
+  <Step title="Predict and inspect">
+    ```python
+    preds = model.predict(X_test)
+    print(preds)
+    # Frame of shape (2, 2) with columns for each class label
+    # containing predicted probabilities
+
+    # Feature importances
+    print(model.feature_importances)
+    ```
+  </Step>
+</Steps>
+
+## When to Use FTRL
+
+<CardGroup cols={2}>
+  <Card title="Good fit" icon="check">
+    - Very large or streaming datasets that don't fit in memory
+    - High-dimensional sparse feature spaces (e.g., click-through rate prediction)
+    - Scenarios where online/incremental learning is required
+    - Binary classification tasks
+  </Card>
+  <Card title="Consider alternatives" icon="x">
+    - Small datasets where batch methods converge faster
+    - Multinomial or regression tasks (experimental support only)
+    - When interpretable linear coefficients are needed (use LinearModel)
+  </Card>
+</CardGroup>

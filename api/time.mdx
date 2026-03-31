@@ -1,0 +1,184 @@
+---
+title: "Time Module"
+description: "Date and time functions for datatable, providing extraction and construction of `date32` and `time64` column values via `dt.time`."
+---
+
+The `datatable.time` module provides functions for working with temporal columns (`date32` and `time64`). You can extract individual components (year, month, day, etc.) from a date or timestamp column, compute derived values such as day-of-week, or construct new temporal columns from their components.
+
+```python
+import datatable as dt
+from datatable import f
+
+DT = dt.Frame(ts=["2023-01-15", "2024-07-04", "2025-12-31"], stype=dt.Type.date32)
+
+# Extract year, month, and day as separate columns
+DT[:, {
+    "year":  dt.time.year(f.ts),
+    "month": dt.time.month(f.ts),
+    "day":   dt.time.day(f.ts),
+}]
+```
+
+<Note>
+All `dt.time` extractor functions accept `FExpr[date32]` or `FExpr[time64]` columns and return integer `FExpr` results. They operate lazily and must be used inside a `DT[rows, cols]` expression.
+</Note>
+
+## Component extraction functions
+
+### Date components
+
+| Function | Input types | Returns | Description |
+|---|---|---|---|
+| `dt.time.year(date)` | `date32`, `time64` | `int32` | Year component. |
+| `dt.time.month(date)` | `date32`, `time64` | `int32` | Month component (1–12). |
+| `dt.time.day(date)` | `date32`, `time64` | `int32` | Day-of-month component (1–31). |
+| `dt.time.day_of_week(date)` | `date32`, `time64` | `int32` | Day of week (Monday = 1, Sunday = 7). |
+
+### Time components
+
+| Function | Input types | Returns | Description |
+|---|---|---|---|
+| `dt.time.hour(ts)` | `time64` | `int32` | Hour component (0–23). |
+| `dt.time.minute(ts)` | `time64` | `int32` | Minute component (0–59). |
+| `dt.time.second(ts)` | `time64` | `int32` | Second component (0–59). |
+| `dt.time.nanosecond(ts)` | `time64` | `int32` | Nanosecond component (0–999,999,999). |
+
+## Construction functions
+
+### `dt.time.ymd(year, month, day)`
+
+Create a `date32` column from integer year, month, and day component columns. Invalid calendar combinations (e.g., February 30) produce NA.
+
+**Parameters**
+
+<ParamField path="year" type="FExpr[int]">
+  Year values.
+</ParamField>
+
+<ParamField path="month" type="FExpr[int]">
+  Month values (1–12). Values outside this range produce NA.
+</ParamField>
+
+<ParamField path="day" type="FExpr[int]">
+  Day values (1 to the last day of the given month). Invalid day/month combinations produce NA.
+</ParamField>
+
+**Returns** `FExpr[date32]`.
+
+---
+
+### `dt.time.ymdt(year, month, day, hour, minute, second, nanosecond=0, *, date=None)`
+
+Create a `time64` column from component columns. Invalid date combinations produce NA; time components have no range checks (e.g., you can pass `second=3600` instead of `hour=1`).
+
+You can replace the `year`, `month`, `day` triple with a single `date` parameter of type `date32`.
+
+**Parameters**
+
+<ParamField path="year" type="FExpr[int]">
+  Year values.
+</ParamField>
+
+<ParamField path="month" type="FExpr[int]">
+  Month values (1–12).
+</ParamField>
+
+<ParamField path="day" type="FExpr[int]">
+  Day values (1 to the last day of the given month).
+</ParamField>
+
+<ParamField path="hour" type="FExpr[int]">
+  Hour values.
+</ParamField>
+
+<ParamField path="minute" type="FExpr[int]">
+  Minute values.
+</ParamField>
+
+<ParamField path="second" type="FExpr[int]">
+  Second values.
+</ParamField>
+
+<ParamField path="nanosecond" type="FExpr[int]" default="0">
+  Nanosecond values. Optional.
+</ParamField>
+
+<ParamField path="date" type="FExpr[date32]">
+  Alternative to the `year`/`month`/`day` triple. Cannot be combined with those parameters.
+</ParamField>
+
+**Returns** `FExpr[time64]`.
+
+## Examples
+
+### Extract date parts from a `date32` column
+
+```python
+import datatable as dt
+from datatable import f
+
+# Build a frame from integer-encoded date32 values
+DT = dt.Frame([1, 1000, 100000], stype=dt.Type.date32)
+
+DT[:, {
+    "date":  f[0],
+    "year":  dt.time.year(f[0]),
+    "month": dt.time.month(f[0]),
+    "day":   dt.time.day(f[0]),
+}]
+#    | date         year  month    day
+#    | date32      int32  int32  int32
+# -- + ----------  -----  -----  -----
+#  0 | 1970-01-02   1970      1      2
+#  1 | 1972-09-27   1972      9     27
+#  2 | 2243-10-17   2243     10     17
+```
+
+### Extract time components from a `time64` column
+
+```python
+import datatable as dt
+from datatable import f
+
+DT = dt.Frame(ts=["2024-06-15T14:30:45.123456", "2025-01-01T00:00:00"],
+              stype=dt.Type.time64)
+
+DT[:, {
+    "hour":   dt.time.hour(f.ts),
+    "minute": dt.time.minute(f.ts),
+    "second": dt.time.second(f.ts),
+}]
+```
+
+### Construct a `date32` column from parts
+
+```python
+import datatable as dt
+from datatable import f
+
+DT = dt.Frame(y=[2005, 2010, 2015], m=[2, 3, 7])
+
+# February 30 is invalid → NA; others succeed
+DT[:, dt.time.ymd(f.y, f.m, 30)]
+#    | C0
+#    | date32
+# -- + ----------
+#  0 | NA
+#  1 | 2010-03-30
+#  2 | 2015-07-30
+```
+
+### Filter rows by day of week
+
+```python
+import datatable as dt
+from datatable import f
+
+DT = dt.Frame(event=["A", "B", "C", "D", "E"],
+              date=["2024-06-10", "2024-06-11", "2024-06-12",
+                    "2024-06-13", "2024-06-14"],
+              stype={"date": dt.Type.date32})
+
+# Keep only weekdays (Monday=1 … Friday=5)
+weekdays = DT[dt.time.day_of_week(f.date) <= 5, :]
+```

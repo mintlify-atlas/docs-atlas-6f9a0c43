@@ -1,0 +1,205 @@
+---
+title: "Data types"
+description: "datatable has three type systems: stype (storage type), ltype (logical type), and Type. Understanding them helps you inspect, cast, and select columns correctly."
+---
+
+Every column in a Frame has a single fixed type. datatable provides three type systems for working with column types, each at a different level of abstraction.
+
+| System | Class | Purpose |
+|--------|-------|---------|
+| Storage type | `dt.stype` | Describes exact physical storage (e.g. `int32`, `float64`) |
+| Logical type | `dt.ltype` | Groups stypes by meaning (e.g. all integers → `ltype.int`) |
+| Type | `dt.Type` | The current, unified type system (replaces stype and ltype) |
+
+<Note>
+`dt.stype` and `dt.ltype` are deprecated as of datatable 1.0.0 and will be removed in 1.2.0. Prefer `dt.Type` for new code.
+</Note>
+
+## dt.Type (recommended)
+
+`dt.Type` is the current unified type system, introduced in datatable 1.0.0. It describes both the logical meaning and storage size of a column's data.
+
+### Available types
+
+| Type | Description |
+|------|-------------|
+| `dt.Type.void` | Empty/null column with no storage |
+| `dt.Type.bool8` | Boolean (1 byte per value) |
+| `dt.Type.int8` | 8-bit signed integer |
+| `dt.Type.int16` | 16-bit signed integer |
+| `dt.Type.int32` | 32-bit signed integer |
+| `dt.Type.int64` | 64-bit signed integer |
+| `dt.Type.float32` | 32-bit IEEE 754 floating point |
+| `dt.Type.float64` | 64-bit IEEE 754 floating point |
+| `dt.Type.str32` | Variable-length string (offsets stored as int32) |
+| `dt.Type.str64` | Variable-length string (offsets stored as int64) |
+| `dt.Type.date32` | Calendar date (days since epoch, 32-bit) |
+| `dt.Type.time64` | Timestamp with nanosecond precision (64-bit) |
+| `dt.Type.obj64` | Arbitrary Python object |
+| `dt.Type.arr32(T)` | Array of type T, 32-bit offsets |
+| `dt.Type.arr64(T)` | Array of type T, 64-bit offsets |
+| `dt.Type.cat8(T)` | Categorical with up to 127 categories |
+| `dt.Type.cat16(T)` | Categorical with up to 32,767 categories |
+| `dt.Type.cat32(T)` | Categorical with up to 2 billion categories |
+
+### Type properties
+
+Each `dt.Type` value exposes several properties:
+
+```python
+t = dt.Type.int32
+
+t.name         # "int32"
+t.min          # -2147483647
+t.max          #  2147483647
+t.is_integer   # True
+t.is_numeric   # True
+t.is_float     # False
+t.is_string    # False
+t.is_boolean   # False
+t.is_temporal  # False
+t.is_void      # False
+t.is_object    # False
+t.is_compound  # False
+t.is_categorical  # False
+t.is_array     # False
+```
+
+### Checking column types
+
+```python
+import datatable as dt
+
+DT = dt.Frame({"id": [1, 2, 3], "price": [9.99, 4.49, 14.0], "label": ["a", "b", "c"]})
+
+DT.types
+# (Type.int32, Type.float64, Type.str32)
+
+DT.types[0] == dt.Type.int32   # True
+```
+
+## stype (storage type)
+
+`dt.stype` enumerates the physical storage formats. Each value directly corresponds to a C primitive or a structured column layout.
+
+### All stypes
+
+| stype | Storage | Logical group |
+|-------|---------|---------------|
+| `stype.void` | 0 bytes | void |
+| `stype.bool8` | 1 byte | bool |
+| `stype.int8` | 1 byte signed integer | int |
+| `stype.int16` | 2 byte signed integer | int |
+| `stype.int32` | 4 byte signed integer | int |
+| `stype.int64` | 8 byte signed integer | int |
+| `stype.float32` | 4 byte IEEE 754 float | real |
+| `stype.float64` | 8 byte IEEE 754 float | real |
+| `stype.str32` | Variable-length strings, int32 offsets | str |
+| `stype.str64` | Variable-length strings, int64 offsets | str |
+| `stype.obj64` | Arbitrary Python object pointer | obj |
+
+Stypes are available as both properties of `dt.stype` and top-level constants:
+
+```python
+dt.stype.int32   # stype.int32
+dt.int64         # stype.int64  (shorthand)
+```
+
+### stype properties
+
+```python
+st = dt.stype.float64
+
+st.ltype    # ltype.real
+st.min      # -1.7976931348623157e+308
+st.max      #  1.7976931348623157e+308
+st.dtype    # numpy.dtype('float64')
+st.ctype    # ctypes.c_double
+st.struct   # '=d'
+```
+
+### Reading column stypes
+
+```python
+DT.stypes
+# (stype.int32, stype.float64, stype.str32)
+```
+
+## ltype (logical type)
+
+`dt.ltype` groups stypes by their logical meaning, ignoring storage size.
+
+### All ltypes
+
+| ltype | Meaning | Corresponding stypes |
+|-------|---------|----------------------|
+| `ltype.bool` | Boolean | `bool8` |
+| `ltype.int` | Integer (any width) | `int8`, `int16`, `int32`, `int64` |
+| `ltype.real` | Floating point | `float32`, `float64` |
+| `ltype.str` | String | `str32`, `str64` |
+| `ltype.time` | Date/time | `date32`, `time64` |
+| `ltype.obj` | Python object | `obj64` |
+
+```python
+dt.ltype.bool
+# ltype.bool
+
+dt.ltype("int32")
+# ltype.int
+
+dt.ltype.real.stypes
+# [stype.float32, stype.float64]
+```
+
+### Reading column ltypes
+
+```python
+DT.ltypes
+# (ltype.int, ltype.real, ltype.str)
+```
+
+## Casting column types
+
+Use `dt.as_type()` or call an stype/Type directly on an f-expression to cast a column:
+
+```python
+import datatable as dt
+from datatable import f
+
+DT = dt.Frame({"A": [1, 2, 3], "B": ["4", "5", "6"]})
+
+# Cast column B from str32 to int32
+DT[:, dt.as_type(f.B, dt.Type.int32)]
+
+# Equivalent using stype as a callable
+DT[:, dt.int32(f.B)]
+
+# Cast all integer columns to strings
+DT[:, dt.str32(f[int])]
+```
+
+You can also use stypes in f-selectors to filter columns by type:
+
+```python
+from datatable import f
+
+DT[:, f[int]]      # select all integer columns
+DT[:, f[float]]    # select all float columns
+DT[:, f[dt.str32]] # select columns with stype str32
+```
+
+## Type mapping reference
+
+The table below summarizes the relationship between Python types, stypes, and ltypes:
+
+| Python type | Default stype | ltype |
+|-------------|---------------|-------|
+| `bool` | `stype.bool8` | `ltype.bool` |
+| `int` | `stype.int64` | `ltype.int` |
+| `float` | `stype.float64` | `ltype.real` |
+| `str` | `stype.str64` | `ltype.str` |
+| `object` | `stype.obj64` | `ltype.obj` |
+
+<Tip>
+When constructing a Frame from Python data, datatable infers the most compact stype that fits the data. For example, small integers will get `int32` rather than `int64`. Pass `stypes={"col": dt.int64}` at construction time to override this.
+</Tip>

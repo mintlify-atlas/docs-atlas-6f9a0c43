@@ -1,0 +1,600 @@
+---
+title: "Aggregation Functions"
+description: "Column-wise aggregation functions that return FExpr objects for use inside DT[i, j] expressions."
+---
+
+All functions on this page return `FExpr` objects. They are designed to be used in the `j` (column-selection) position of a `DT[i, j, ...]` expression. When combined with `by()`, they compute per-group results.
+
+<Note>
+To avoid shadowing Python built-ins, prefer the qualified forms `dt.min()`, `dt.max()`, and `dt.sum()` over the bare names.
+</Note>
+
+---
+
+## mean
+
+```python
+mean(cols)
+```
+
+Calculate the mean value for each column from `cols`. Missing values are excluded from the calculation.
+
+<ParamField path="cols" type="FExpr" required>
+  Input columns. Must be numeric.
+</ParamField>
+
+Returns a single-row `FExpr` with the same column names and count as `cols`. Column types are `float32` for `float32` inputs and `float64` for all other numeric types. Raises `TypeError` for non-numeric columns.
+
+```python
+from datatable import dt, f, by
+
+df = dt.Frame({"A": [1, 1, 2, 1, 2], "B": [None, 2, 3, 4, 5], "C": [1, 2, 1, 1, 2]})
+
+df[:, dt.mean(f.A)]
+#    |       A
+#    | float64
+# -- + -------
+#  0 |     1.4
+
+df[:, dt.mean(f[:2])]
+#    |       A        B
+#    | float64  float64
+# -- + -------  -------
+#  0 |     1.4      3.5
+
+# With grouping
+df[:, dt.mean({"A_mean": f.A, "B_mean": f.B}), by("C")]
+#    |     C   A_mean   B_mean
+#    | int32  float64  float64
+# -- + -----  -------  -------
+#  0 |     1  1.33333      3.5
+#  1 |     2  1.5          3.5
+```
+
+---
+
+## sum
+
+```python
+sum(cols)
+```
+
+Calculate the sum of values for each column from `cols`. Missing values contribute zero to the sum.
+
+<ParamField path="cols" type="FExpr" required>
+  Input columns. Must be numeric.
+</ParamField>
+
+Returns a single-row `FExpr`. Column types are `int64` for boolean and integer inputs, `float32` for `float32` inputs, and `float64` for `float64` inputs. Raises `TypeError` for non-numeric columns.
+
+```python
+from datatable import dt, f, by
+
+df = dt.Frame({"A": [1, 1, 2, 1, 2], "B": [None, 2, 3, 4, 5], "C": [1, 2, 1, 1, 2]})
+
+df[:, dt.sum(f.A)]
+#    |     A
+#    | int64
+# -- + -----
+#  0 |     7
+
+df[:, dt.sum(f[:2])]
+#    |     A      B
+#    | int64  int64
+# -- + -----  -----
+#  0 |     7     14
+
+df[:, [dt.sum(f.A), dt.sum(f.B)], by(f.C)]
+#    |     C      A      B
+#    | int32  int64  int64
+# -- + -----  -----  -----
+#  0 |     1      4      7
+#  1 |     2      3      7
+```
+
+---
+
+## min
+
+```python
+min(cols)
+```
+
+Calculate the minimum value for each column from `cols`.
+
+<ParamField path="cols" type="FExpr" required>
+  Input columns. Must be numeric.
+</ParamField>
+
+Returns a single-row `FExpr` with the same names, types, and column count as `cols`. Raises `TypeError` for non-numeric columns.
+
+```python
+from datatable import dt, f, by
+
+df = dt.Frame({"A": [1, 1, 1, 2, 2, 2, 3, 3, 3], "B": [3, 2, 20, 1, 6, 2, 3, 22, 1]})
+
+df[:, dt.min(f.B)]
+#    |     B
+#    | int32
+# -- + -----
+#  0 |     1
+
+df[:, dt.min(f[:])]
+#    |     A      B
+#    | int32  int32
+# -- + -----  -----
+#  0 |     1      1
+
+# Minimum per group
+df[:, dt.min(f.B), by("A")]
+#    |     A      B
+#    | int32  int32
+# -- + -----  -----
+#  0 |     1      2
+#  1 |     2      1
+#  2 |     3      1
+```
+
+---
+
+## max
+
+```python
+max(cols)
+```
+
+Calculate the maximum value for each column from `cols`.
+
+<ParamField path="cols" type="FExpr" required>
+  Input columns. Must be numeric.
+</ParamField>
+
+Returns a single-row `FExpr` with the same names, types, and column count as `cols`. Raises `TypeError` for non-numeric columns.
+
+```python
+from datatable import dt, f, by
+
+df = dt.Frame({"A": [1, 1, 1, 2, 2, 2, 3, 3, 3], "B": [3, 2, 20, 1, 6, 2, 3, 22, 1]})
+
+df[:, dt.max(f.B)]
+#    |     B
+#    | int32
+# -- + -----
+#  0 |    22
+
+# Maximum per group
+df[:, dt.max(f.B), by("A")]
+#    |     A      B
+#    | int32  int32
+# -- + -----  -----
+#  0 |     1     20
+#  1 |     2      6
+#  2 |     3     22
+```
+
+---
+
+## sd
+
+```python
+sd(cols)
+```
+
+Calculate the standard deviation for each column from `cols`. Uses the sample standard deviation (Bessel's correction).
+
+<ParamField path="cols" type="FExpr" required>
+  Input columns. Must be numeric.
+</ParamField>
+
+Returns a single-row `FExpr`. Column types are `float32` for `float32` inputs and `float64` for all other numeric types. Raises `TypeError` for non-numeric columns.
+
+```python
+from datatable import dt, f
+
+DT = dt.Frame(A=[0, 1, 2, 3], B=[0, 2, 4, 6])
+
+DT[:, dt.sd(f.A)]
+#    |       A
+#    | float64
+# -- + -------
+#  0 | 1.29099
+
+DT[:, dt.sd([f.A, f.B])]
+#    |       A        B
+#    | float64  float64
+# -- + -------  -------
+#  0 | 1.29099  2.58199
+```
+
+---
+
+## median
+
+```python
+median(cols)
+```
+
+Calculate the median value for each column from `cols`.
+
+<ParamField path="cols" type="FExpr" required>
+  Input columns. Must be numeric.
+</ParamField>
+
+Returns a single-row `FExpr`. Column types are `float32` for `float32` inputs and `float64` for all other numeric types. Raises `TypeError` for non-numeric columns.
+
+```python
+from datatable import dt, f, by
+
+df = dt.Frame({"A": [1, 1, 2, 1, 2], "B": [None, 2, 3, 4, 5], "C": [1, 2, 1, 1, 2]})
+
+df[:, dt.median(f.A)]
+#    |       A
+#    | float64
+# -- + -------
+#  0 |       1
+
+df[:, dt.median([f.A, f.B])]
+#    |       A        B
+#    | float64  float64
+# -- + -------  -------
+#  0 |       1      3.5
+
+# Median per group
+df[:, dt.median({"A_median": f.A, "B_median": f.B}), by("C")]
+#    |     C  A_median  B_median
+#    | int32   float64   float64
+# -- + -----  --------  --------
+#  0 |     1       1         3.5
+#  1 |     2       1.5       3.5
+```
+
+---
+
+## prod
+
+```python
+prod(cols)
+```
+
+Calculate the product of values for each column from `cols`. Missing values contribute a factor of one (i.e., are skipped).
+
+<ParamField path="cols" type="FExpr" required>
+  Input columns. Must be numeric.
+</ParamField>
+
+Returns a single-row `FExpr`. Column types are `int64` for boolean and integer inputs, `float32` for `float32` inputs, and `float64` for `float64` inputs. Raises `TypeError` for non-numeric columns.
+
+```python
+from datatable import dt, f, by, prod
+
+DT = dt.Frame({"A": [1, 1, 2, 1, 2], "B": [None, 2, 3, 4, 5], "C": [1, 2, 1, 1, 2]})
+
+DT[:, prod(f.A)]
+#    |     A
+#    | int64
+# -- + -----
+#  0 |     4
+
+DT[:, prod(f["A", "B"]), by("C")]
+#    |     C      A      B
+#    | int32  int64  int64
+# -- + -----  -----  -----
+#  0 |     1      2     12
+#  1 |     2      2     10
+```
+
+---
+
+## count
+
+```python
+count(cols=None)
+```
+
+Count non-missing values for each column from `cols`. When called with no arguments, counts the total number of rows. This function is group-aware.
+
+<ParamField path="cols" type="FExpr">
+  Input columns. When omitted, returns the total row count.
+</ParamField>
+
+Returns an `FExpr` with `int64` columns. Raises `TypeError` for `obj64` columns.
+
+```python
+from datatable import dt, f
+
+DT = dt.Frame({"A": [None, 1, 2, None, 2], "B": [None, 2, 3, 4, 5], "C": [1, 2, 1, 1, 2]})
+
+# Count non-missing values in all columns
+DT[:, dt.count(f[:])]
+#    |     A      B      C
+#    | int64  int64  int64
+# -- + -----  -----  -----
+#  0 |     3      4      5
+
+# Count non-missing in one column
+DT[:, dt.count(f.B)]
+#    |     B
+#    | int64
+# -- + -----
+#  0 |     4
+
+# Total row count
+DT[:, dt.count()]
+#    | count
+#    | int64
+# -- + -----
+#  0 |     5
+```
+
+---
+
+## countna
+
+Count **missing** values for each column. Equivalent to `count()` applied to `isna(cols)`.
+
+```python
+from datatable import dt, f, isna
+
+DT = dt.Frame({"A": [None, 1, 2, None, 2], "B": [None, 2, 3, 4, 5]})
+
+DT[:, dt.sum(dt.isna(f[:]))]
+#    |     A      B
+#    | int64  int64
+# -- + -----  -----
+#  0 |     2      1
+```
+
+---
+
+## nunique
+
+Count the number of unique non-missing values for each column.
+
+```python
+from datatable import dt, f
+
+DT = dt.Frame({"A": [1, 1, 2, 3, 2], "B": ["x", "y", "x", "z", "y"]})
+
+DT[:, {"A_nunique": dt.count(dt.unique(DT["A"])),
+       "B_nunique": dt.count(dt.unique(DT["B"]))}]
+```
+
+---
+
+## first / last
+
+Return the first or last non-missing value for each column, respecting group boundaries when `by()` is used.
+
+```python
+from datatable import dt, f, by
+
+DT = dt.Frame({"grp": ["a", "a", "b", "b"], "val": [10, 20, 30, 40]})
+
+DT[:, dt.first(f.val), by("grp")]
+#    | grp    val
+#    | str32  int32
+# -- + -----  -----
+#  0 | a         10
+#  1 | b         30
+
+DT[:, dt.last(f.val), by("grp")]
+#    | grp    val
+#    | str32  int32
+# -- + -----  -----
+#  0 | a         20
+#  1 | b         40
+```
+
+---
+
+## corr / cov
+
+Compute the Pearson correlation coefficient or covariance between two columns.
+
+<ParamField path="col1" type="FExpr" required>
+  First numeric column.
+</ParamField>
+
+<ParamField path="col2" type="FExpr" required>
+  Second numeric column.
+</ParamField>
+
+```python
+from datatable import dt, f
+
+DT = dt.Frame({"X": [1, 2, 3, 4, 5], "Y": [2, 4, 5, 4, 5]})
+
+DT[:, dt.corr(f.X, f.Y)]
+DT[:, dt.cov(f.X, f.Y)]
+```
+
+---
+
+## Cumulative functions
+
+Compute running (prefix) aggregations row-by-row within each group.
+
+| Function | Description |
+|---|---|
+| `cumsum(cols)` | Running sum |
+| `cumprod(cols)` | Running product |
+| `cummax(cols)` | Running maximum |
+| `cummin(cols)` | Running minimum |
+| `cumcount()` | Running count of non-missing values |
+
+```python
+from datatable import dt, f, by, cumsum, cummax, cummin
+
+DT = dt.Frame({"grp": ["a", "a", "b", "b"], "val": [1, 3, 2, 4]})
+
+DT[:, {"val": f.val, "running_sum": cumsum(f.val)}, by("grp")]
+#    | grp    val  running_sum
+#    | str32  int32      int64
+# -- + -----  -----  ---------
+#  0 | a          1          1
+#  1 | a          3          4
+#  2 | b          2          2
+#  3 | b          4          6
+```
+
+---
+
+## shift
+
+```python
+shift(cols, n=1)
+```
+
+Shift column values forward (positive `n`) or backward (negative `n`) by `n` rows, filling the boundary with `NA`.
+
+<ParamField path="cols" type="FExpr" required>
+  Input columns.
+</ParamField>
+
+<ParamField path="n" type="int" default="1">
+  Number of positions to shift. Positive shifts down (lag), negative shifts up (lead).
+</ParamField>
+
+```python
+from datatable import dt, f, shift
+
+DT = dt.Frame(val=[10, 20, 30, 40])
+
+DT[:, {"val": f.val, "lag1": shift(f.val), "lead1": shift(f.val, -1)}]
+#    |   val   lag1  lead1
+#    | int32  int32  int32
+# -- + -----  -----  -----
+#  0 |    10     NA     20
+#  1 |    20     10     30
+#  2 |    30     20     40
+#  3 |    40     30     NA
+```
+
+---
+
+## fillna
+
+```python
+fillna(cols, value)
+```
+
+Replace missing values in `cols` with `value`.
+
+<ParamField path="cols" type="FExpr" required>
+  Input columns.
+</ParamField>
+
+<ParamField path="value" type="scalar | FExpr" required>
+  Replacement value for missing entries.
+</ParamField>
+
+```python
+from datatable import dt, f, fillna
+
+DT = dt.Frame({"A": [1, None, 3, None, 5]})
+DT[:, fillna(f.A, 0)]
+#    |     A
+#    | int32
+# -- + -----
+#  0 |     1
+#  1 |     0
+#  2 |     3
+#  3 |     0
+#  4 |     5
+```
+
+---
+
+## cut / qcut
+
+Bin continuous values into discrete intervals.
+
+```python
+cut(col, nbins)       # equal-width bins
+qcut(col, nquantiles) # equal-frequency (quantile) bins
+```
+
+<ParamField path="col" type="FExpr" required>
+  A single numeric column to bin.
+</ParamField>
+
+<ParamField path="nbins" type="int" required>
+  Number of equal-width bins for `cut`.
+</ParamField>
+
+<ParamField path="nquantiles" type="int" required>
+  Number of equal-frequency bins for `qcut`.
+</ParamField>
+
+```python
+from datatable import dt, f, cut, qcut
+
+DT = dt.Frame(val=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+
+DT[:, cut(f.val, nbins=3)]
+DT[:, qcut(f.val, nquantiles=4)]
+```
+
+---
+
+## ifelse
+
+```python
+ifelse(condition, if_true, if_false)
+```
+
+Element-wise conditional expression equivalent to a ternary operator.
+
+<ParamField path="condition" type="FExpr[bool]" required>
+  Boolean condition column.
+</ParamField>
+
+<ParamField path="if_true" type="FExpr | scalar" required>
+  Value or expression used when `condition` is `True`.
+</ParamField>
+
+<ParamField path="if_false" type="FExpr | scalar" required>
+  Value or expression used when `condition` is `False`.
+</ParamField>
+
+```python
+from datatable import dt, f, ifelse
+
+DT = dt.Frame(score=[45, 72, 55, 90, 38])
+
+DT[:, ifelse(f.score >= 60, "pass", "fail")]
+#    | C0
+#    | str32
+# -- + -----
+#  0 | fail
+#  1 | pass
+#  2 | fail
+#  3 | pass
+#  4 | fail
+```
+
+---
+
+## ngroup
+
+```python
+ngroup()
+```
+
+Return the sequential group index for each row, starting from `0`. Must be used together with `by()`.
+
+```python
+from datatable import dt, f, by, ngroup
+
+DT = dt.Frame({"grp": ["b", "a", "b", "a", "c"], "val": [1, 2, 3, 4, 5]})
+
+DT[:, {"grp": f.grp, "group_id": ngroup()}, by("grp")]
+#    | grp    val  group_id
+#    | str32  int32   int64
+# -- + -----  -----  ------
+#  0 | a          2       0
+#  1 | a          4       0
+#  2 | b          1       1
+#  3 | b          3       1
+#  4 | c          5       2
+```

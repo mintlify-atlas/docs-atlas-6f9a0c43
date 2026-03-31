@@ -1,0 +1,412 @@
+---
+title: "Data Types"
+description: "API reference for the datatable type system: Type, stype, and ltype."
+---
+
+datatable uses three related constructs to describe column types:
+
+- **`dt.Type`** — the current, unified type system (added in v1.0.0). Describes both the logical meaning and storage format of data.
+- **`dt.stype`** — the legacy "storage type" enum. Deprecated since v1.0.0.
+- **`dt.ltype`** — the legacy "logical type" enum. Deprecated since v1.0.0.
+
+For new code, use `dt.Type`.
+
+## `dt.Type`
+
+`Type` describes the type of data stored in a single column. It encodes both the logical kind of data (integer, string, date, etc.) and its storage size in bits. Some types carry additional properties such as a parameterized element type (arrays, categoricals).
+
+```python
+import datatable as dt
+
+DT = dt.Frame(A=[1, 2, 3], B=["x", "y", "z"])
+DT.types      # [Type.int32, Type.str32]
+DT.types[0]   # Type.int32
+```
+
+### Type values
+
+#### Primitive types
+
+<ResponseField name="dt.Type.void" type="Type">
+  The type of a column in which every value is NA. Occupies no storage space. Convertible to any other type.
+
+  ```python
+  dt.Frame([None, None, None]).type   # Type.void
+  ```
+</ResponseField>
+
+<ResponseField name="dt.Type.bool8" type="Type">
+  Boolean values, stored as 1 byte per element. NA values are supported. Treated as numeric (`True` = 1, `False` = 0).
+
+  ```python
+  dt.Frame([True, False, None]).type  # Type.bool8
+  ```
+</ResponseField>
+
+<ResponseField name="dt.Type.int8" type="Type">
+  8-bit signed integer. Range: −127 to 127. Corresponds to `int8_t` in C.
+</ResponseField>
+
+<ResponseField name="dt.Type.int16" type="Type">
+  16-bit signed integer. Range: −32,767 to 32,767. Corresponds to `int16_t` in C.
+</ResponseField>
+
+<ResponseField name="dt.Type.int32" type="Type">
+  32-bit signed integer. Range: −2,147,483,647 to 2,147,483,647. Corresponds to `int32_t` in C. This is the default type when constructing a Frame from a Python list of integers.
+</ResponseField>
+
+<ResponseField name="dt.Type.int64" type="Type">
+  64-bit signed integer. Range: −9,223,372,036,854,775,807 to 9,223,372,036,854,775,807. Corresponds to `int64_t` in C.
+</ResponseField>
+
+<ResponseField name="dt.Type.float32" type="Type">
+  32-bit IEEE 754 floating-point number. Corresponds to `float` in C.
+</ResponseField>
+
+<ResponseField name="dt.Type.float64" type="Type">
+  64-bit IEEE 754 floating-point number. Corresponds to `double` in C. This is the default type when constructing from Python `float` values.
+</ResponseField>
+
+<ResponseField name="dt.Type.str32" type="Type">
+  Variable-length UTF-8 strings, with 32-bit offsets. Can store up to 2 GB of character data per column. When the 2 GB limit is exceeded, the column is automatically promoted to `str64`.
+
+  Corresponds to `str` in Python, `pa.string()` in Arrow, and `dtype('object')` in numpy/pandas.
+</ResponseField>
+
+<ResponseField name="dt.Type.str64" type="Type">
+  Variable-length UTF-8 strings, with 64-bit offsets. No practical limit on column size.
+</ResponseField>
+
+<ResponseField name="dt.Type.obj64" type="Type">
+  Stores arbitrary Python objects as 64-bit pointers. Use sparingly; most operations are not supported on object columns.
+</ResponseField>
+
+#### Temporal types
+
+<ResponseField name="dt.Type.date32" type="Type">
+  Calendar date without a time component, stored as a 32-bit signed integer counting days since 1970-01-01. Accommodates dates in the range ±5.8 million years using the proleptic Gregorian calendar. Added in v1.0.0.
+
+  Corresponds to `datetime.date` in Python, `pa.date32()` in Arrow, and `np.dtype('<M8[D]')` in numpy.
+
+  ```python
+  from datetime import date
+  DT = dt.Frame([date(2020, 1, 30), date(2021, 6, 15), None])
+  DT.type   # Type.date32
+  ```
+</ResponseField>
+
+<ResponseField name="dt.Type.time64" type="Type">
+  A specific moment in time, stored as a 64-bit integer counting nanoseconds since 1970-01-01 00:00:00 UTC. Not leap-second aware; not timezone-aware in the current version. Added in v1.0.0.
+
+  Corresponds to `datetime.datetime` in Python, `pa.timestamp('ns')` in Arrow, and `dtype('datetime64[ns]')` in numpy/pandas.
+
+  ```python
+  dt.Type.time64.min
+  # datetime.datetime(1677, 9, 22, 0, 12, 43, 145225)
+  dt.Type.time64.max
+  # datetime.datetime(2262, 4, 11, 23, 47, 16, 854775)
+  ```
+</ResponseField>
+
+#### Compound types
+
+<ResponseField name="dt.Type.arr32(T)" type="Type">
+  Array type with 32-bit offsets. Each element in the column is a list of values of type `T`. Added in v1.1.0.
+
+  ```python
+  dt.Type.arr32(dt.Type.int32)
+  ```
+</ResponseField>
+
+<ResponseField name="dt.Type.arr64(T)" type="Type">
+  Array type with 64-bit offsets. Each element is a list of values of type `T`. Use for large arrays that exceed 32-bit indexing. Added in v1.1.0.
+</ResponseField>
+
+<ResponseField name="dt.Type.cat8(T)" type="Type">
+  Categorical type with 8-bit codes (up to 255 categories). Each element stores a value of type `T`. Added in v1.1.0.
+
+  ```python
+  dt.Type.cat8(dt.Type.str32)
+  ```
+</ResponseField>
+
+<ResponseField name="dt.Type.cat16(T)" type="Type">
+  Categorical type with 16-bit codes (up to 65,535 categories). Added in v1.1.0.
+</ResponseField>
+
+<ResponseField name="dt.Type.cat32(T)" type="Type">
+  Categorical type with 32-bit codes. Added in v1.1.0.
+</ResponseField>
+
+### Properties
+
+<ResponseField name=".name" type="str">
+  The canonical string name of this type.
+
+  ```python
+  dt.Type.int64.name     # 'int64'
+  dt.Type.float32.name   # 'float32'
+  ```
+</ResponseField>
+
+<ResponseField name=".min" type="int | float | datetime | None">
+  The smallest finite value representable by this type. Returns `None` for types without a defined minimum (e.g., strings, objects).
+
+  ```python
+  dt.Type.int8.min      # -127
+  dt.Type.float32.min   # -3.4028234663852886e+38
+  dt.Type.date32.min    # -2147483647
+  ```
+</ResponseField>
+
+<ResponseField name=".max" type="int | float | datetime | None">
+  The largest finite value representable by this type.
+
+  ```python
+  dt.Type.int8.max      # 127
+  dt.Type.float32.max   # 3.4028234663852886e+38
+  ```
+</ResponseField>
+
+<ResponseField name=".is_boolean" type="bool">
+  `True` if this is a boolean type (`bool8`).
+</ResponseField>
+
+<ResponseField name=".is_integer" type="bool">
+  `True` if this is an integer type (`int8`, `int16`, `int32`, `int64`).
+</ResponseField>
+
+<ResponseField name=".is_float" type="bool">
+  `True` if this is a float type (`float32`, `float64`).
+</ResponseField>
+
+<ResponseField name=".is_numeric" type="bool">
+  `True` for boolean, integer, and float types (`bool8`, `int8`, `int16`, `int32`, `int64`, `float32`, `float64`).
+
+  ```python
+  dt.Type.int32.is_numeric    # True
+  dt.Type.float64.is_numeric  # True
+  dt.Type.str32.is_numeric    # False
+  dt.Type.void.is_numeric     # False
+  ```
+</ResponseField>
+
+<ResponseField name=".is_string" type="bool">
+  `True` for string types (`str32`, `str64`).
+</ResponseField>
+
+<ResponseField name=".is_temporal" type="bool">
+  `True` for temporal types (`date32`, `time64`).
+</ResponseField>
+
+<ResponseField name=".is_object" type="bool">
+  `True` for the object type (`obj64`).
+</ResponseField>
+
+<ResponseField name=".is_void" type="bool">
+  `True` if this is the void type.
+</ResponseField>
+
+<ResponseField name=".is_array" type="bool">
+  `True` for array types (`arr32`, `arr64`).
+</ResponseField>
+
+<ResponseField name=".is_categorical" type="bool">
+  `True` for categorical types (`cat8`, `cat16`, `cat32`).
+</ResponseField>
+
+<ResponseField name=".is_compound" type="bool">
+  `True` for compound types (arrays and categoricals).
+</ResponseField>
+
+### Using types when creating frames
+
+Pass types to the `Frame` constructor using the `types` or `type` parameters:
+
+```python
+# Set a single type for all columns
+DT = dt.Frame(A=[1, 2, 3], B=[4, 5, 6], type=dt.Type.int64)
+
+# Set per-column types as a list
+DT = dt.Frame([[1, 2], [3.0, 4.0]],
+              names=["A", "B"],
+              types=[dt.Type.int32, dt.Type.float32])
+
+# Set per-column types as a dict
+DT = dt.Frame(A=[1, 2], B=[3.0, 4.0],
+              types={"A": dt.Type.int64, "B": dt.Type.float32})
+```
+
+### Type conversion with `dt.as_type()`
+
+Cast columns to a different type using `dt.as_type()` or the equivalent `.as_type()` method on an f-expression:
+
+```python
+# Convert a column in-place via setitem
+DT["A"] = dt.Type.float64
+
+# Cast during selection (produces a new frame)
+DT[:, f.score.as_type(dt.Type.int32)]
+
+# Cast using dt.as_type()
+DT[:, dt.as_type(f.score, dt.Type.float64)]
+
+# Cast using stype shorthand (legacy)
+DT[:, f.score.as_type(dt.float32)]
+```
+
+---
+
+## `dt.stype` (deprecated)
+
+<Warning>
+`stype` is deprecated since v1.0.0 and will be removed in v1.2.0. Use `dt.Type` instead.
+</Warning>
+
+`stype` is an enum of "storage types" describing the physical representation of column data. Most values correspond directly to C primitive types.
+
+```python
+dt.stype.int32    # stype.int32
+dt.int32          # also available directly on the dt namespace
+```
+
+### Values
+
+| Value | Bits | Description | Range |
+|-------|------|-------------|-------|
+| `stype.void` | 0 | All-NA column | — |
+| `stype.bool8` | 8 | Boolean | False / True |
+| `stype.int8` | 8 | 8-bit signed integer | −127 to 127 |
+| `stype.int16` | 16 | 16-bit signed integer | −32,767 to 32,767 |
+| `stype.int32` | 32 | 32-bit signed integer | −2,147,483,647 to 2,147,483,647 |
+| `stype.int64` | 64 | 64-bit signed integer | −9.2×10¹⁸ to 9.2×10¹⁸ |
+| `stype.float32` | 32 | 32-bit IEEE float | ±3.4×10³⁸ |
+| `stype.float64` | 64 | 64-bit IEEE float | ±1.8×10³⁰⁸ |
+| `stype.str32` | var | Strings, 32-bit offsets (≤ 2 GB) | — |
+| `stype.str64` | var | Strings, 64-bit offsets | — |
+| `stype.obj64` | 64 | Arbitrary Python objects | — |
+
+### Properties
+
+<ResponseField name=".ltype" type="ltype">
+  The `dt.ltype` corresponding to this stype.
+
+  ```python
+  dt.stype.int32.ltype   # ltype.int
+  dt.stype.float64.ltype # ltype.real
+  ```
+</ResponseField>
+
+<ResponseField name=".ctype" type="ctypes type">
+  The `ctypes` C-level type for elements in a column of this stype. For variable-width types (strings), this returns the type of the fixed-width offset component.
+
+  ```python
+  dt.stype.int32.ctype    # ctypes.c_int32
+  dt.stype.str32.ctype    # ctypes.c_int32 (offset component)
+  ```
+</ResponseField>
+
+<ResponseField name=".dtype" type="numpy.dtype">
+  The `numpy.dtype` corresponding to this stype. Requires numpy to be installed.
+
+  ```python
+  dt.stype.float64.dtype  # dtype('float64')
+  dt.stype.str32.dtype    # dtype('O')
+  ```
+</ResponseField>
+
+<ResponseField name=".struct" type="str">
+  The `struct` module format string for this stype.
+
+  ```python
+  dt.stype.int32.struct   # '=i'
+  dt.stype.float64.struct # '=d'
+  ```
+</ResponseField>
+
+<ResponseField name=".min" type="int | float | None">
+  The smallest finite value for numeric stypes. `None` for non-numeric types.
+</ResponseField>
+
+<ResponseField name=".max" type="int | float | None">
+  The largest finite value for numeric stypes. `None` for non-numeric types.
+</ResponseField>
+
+### Lookup
+
+`stype(x)` looks up an stype by value, name, Python type, or numpy dtype:
+
+```python
+dt.stype(5)            # stype.int64
+dt.stype("float32")    # stype.float32
+dt.stype(int)          # stype.int64
+dt.stype(float)        # stype.float64
+dt.stype(str)          # stype.str64
+```
+
+### Casting
+
+Call an stype as a function to cast a column expression:
+
+```python
+DT[:, dt.int64(f.score)]
+```
+
+---
+
+## `dt.ltype` (deprecated)
+
+<Warning>
+`ltype` is deprecated since v1.0.0 and will be removed in v1.2.0. Use `dt.Type` instead.
+</Warning>
+
+`ltype` is an enum of "logical types" — the kind of data a column represents, independent of its physical storage format. Each ltype may correspond to multiple stypes.
+
+```python
+dt.ltype.int    # ltype.int
+dt.ltype.real   # ltype.real
+```
+
+### Values
+
+| Value | Description | Corresponding stypes |
+|-------|-------------|---------------------|
+| `ltype.bool` | Boolean | `stype.bool8` |
+| `ltype.int` | Integer | `stype.int8`, `int16`, `int32`, `int64` |
+| `ltype.real` | Floating-point | `stype.float32`, `float64` |
+| `ltype.str` | String | `stype.str32`, `str64` |
+| `ltype.time` | Date / time | `stype.date32`, `time64` |
+| `ltype.obj` | Python object | `stype.obj64` |
+
+### Properties
+
+<ResponseField name=".stypes" type="List[stype]">
+  The list of stypes that map to this ltype.
+
+  ```python
+  dt.ltype.int.stypes   # [stype.int8, stype.int16, stype.int32, stype.int64]
+  dt.ltype.real.stypes  # [stype.float32, stype.float64]
+  dt.ltype.time.stypes  # [stype.date32, stype.time64]
+  ```
+</ResponseField>
+
+### Lookup
+
+`ltype(x)` resolves a value to its ltype:
+
+```python
+dt.ltype("int32")   # ltype.int
+dt.ltype(bool)      # ltype.bool
+```
+
+### Examples
+
+```python
+# Access ltype from a frame column's stype
+DT = dt.Frame(A=[1, 2, 3], B=["x", "y", "z"])
+DT.stypes[0].ltype   # ltype.int
+DT.stypes[1].ltype   # ltype.str
+
+# Use ltype for type-based column selection (via f)
+DT[:, f[dt.ltype.int]]   # all integer columns
+```

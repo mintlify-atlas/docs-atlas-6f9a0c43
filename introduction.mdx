@@ -1,0 +1,51 @@
+---
+title: "Introduction"
+description: "datatable is a high-performance Python library for manipulating large 2-dimensional tabular data structures, built for speed and big data workflows."
+---
+
+datatable is a Python package for manipulating 2-dimensional tabular data structures (data frames). It is close in spirit to pandas and R's data.table — in fact, it mirrors data.table's core algorithms and API — but puts specific emphasis on speed and big data support.
+
+datatable was started in 2017 as a toolkit for performing big data operations (up to 100 GB) on a single machine at maximum speed. Those requirements are driven by modern machine-learning workflows, which need to process large volumes of data and generate many features to achieve the best model accuracy. The first production user was [H2O Driverless AI](https://www.h2o.ai/driverless-ai/).
+
+## Key capabilities
+
+<CardGroup cols={2}>
+  <Card title="Column-oriented storage" icon="table-columns">
+    Data is stored column-by-column, making column-wise operations faster and more memory-efficient than row-oriented layouts.
+  </Card>
+  <Card title="Native C++ implementation" icon="microchip">
+    All data types — including strings — are handled natively in C++, matching or exceeding the performance of pandas and numpy for numeric types and surpassing them for strings.
+  </Card>
+  <Card title="Expressive query syntax" icon="code">
+    The `DT[i, j, ...]` square-bracket notation lets you select, filter, transform, group, sort, and join data in a single concise expression, inspired by R's data.table.
+  </Card>
+  <Card title="Multi-threaded processing" icon="bolt">
+    Time-consuming operations automatically use all available CPU cores for maximum throughput.
+  </Card>
+  <Card title="Fast I/O" icon="file-arrow-up">
+    `fread()` reads CSV, text, Excel, and other formats with automatic detection of separators, headers, and column types. It supports files, URLs, shell output, archives, and glob patterns.
+  </Card>
+  <Card title="Memory-mapped datasets" icon="database">
+    Data stored on disk in the binary `.jay` format can be memory-mapped and worked on without loading everything into RAM, enabling out-of-memory workflows transparently.
+  </Card>
+</CardGroup>
+
+## Design goals
+
+datatable is designed to meet the following requirements:
+
+- **All types support null values** with minimal overhead.
+- **Date-time and categorical types** are supported natively. Object type is available but its use is discouraged.
+- **Minimal data copying** — copy-on-write semantics are used for shared data, and rowindex views are used in filtering, sorting, grouping, and joining to avoid unnecessary copies.
+- **Interoperability** with pandas, numpy, pyarrow, and plain Python: convert to and from other frameworks with a single method call.
+
+## Get started
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Install datatable with pip on macOS, Linux, or Windows, or build from source.
+  </Card>
+  <Card title="Quick start" icon="rocket" href="/quickstart">
+    Load data, run your first queries, and export results in a few minutes.
+  </Card>
+</CardGroup>

@@ -1,0 +1,172 @@
+---
+title: "f-expressions"
+description: "f-expressions are the primary way to reference columns and build row filters, computed columns, and grouping expressions in datatable."
+---
+
+The `datatable` module exports a special symbol `f` that represents columns of the frame currently being operated on. You use `f` inside `DT[i, j, by(), ...]` calls to refer to columns by name, index, slice, or type — and to compose arithmetic or comparison expressions over them.
+
+```python
+import datatable as dt
+from datatable import f
+```
+
+## The f symbol
+
+By itself, `f.price` means _a column named "price" in an unspecified frame_. The expression becomes concrete when used inside a frame operation:
+
+```python
+train_dt[f.price > 0, :]
+```
+
+Here `f` refers to `train_dt`. The expression filters all rows where `price` is positive.
+
+Because `f`-expressions are frame-agnostic until evaluated, you can save them and reuse them across frames:
+
+```python
+price_filter = f.price > 0
+
+train_filtered = train_dt[price_filter, :]
+test_filtered  = test_dt[price_filter, :]
+```
+
+## Single-column selectors
+
+Reference a column by attribute name, string key, or integer index:
+
+```python
+f.price         # column named "price"
+f["price"]      # same, using string key
+f["Price ($)"]  # column names with spaces or special characters
+f[3]            # column at index 3 (0-based)
+f[-1]           # last column
+```
+
+Integer indices follow standard Python list semantics: negative indices count from the end, and out-of-range indices raise an error.
+
+The bracket form is also useful when the column name is computed at runtime:
+
+```python
+# frame has columns "2017_01", "2017_02", ..., "2019_12"
+cols = [f["%d_%02d" % (year, month)]
+        for month in range(1, 13)
+        for year in [2017, 2018, 2019]]
+```
+
+## Multi-column selectors
+
+When you pass a slice or a type to `f[...]`, you get a _columnset_ — a selection of zero or more columns:
+
+```python
+f[:]          # all columns
+f[::-1]       # all columns in reverse order
+f[:5]         # first 5 columns
+f[3:4]        # fourth column (slice, not a single-column selector)
+f["B":"H"]    # columns from B to H, inclusive
+f["C9":"C1"]  # columns C9, C8, ..., C1 (reversed name range)
+f[:"C3"]      # all columns up to C3
+f["C5":]      # all columns starting from C5
+f[int]        # all integer columns
+f[float]      # all float columns
+f[dt.str32]   # all columns with stype str32
+f[None]       # no columns (empty columnset)
+```
+
+A columnset can appear anywhere a sequence of columns is expected — in `j`, inside `by()` or `sort()`, or with functions like `rowsum()`, `rowmean()`, `rowmin()`:
+
+```python
+DT[:, sum(f[:])]         # sum of every column
+DT[:, f[:3] + f[-3:]]    # pairwise sum of first 3 and last 3 columns
+```
+
+<Note>
+`f[9]` raises an error if the frame has fewer than 10 columns. `f[9:10]` returns an empty columnset instead. This is consistent with Python's slicing semantics.
+</Note>
+
+## Modifying columnsets
+
+Use `.extend()` to add columns and `.remove()` to subtract them:
+
+```python
+f[int].extend(f[float])          # all integer and float columns
+f[:3].extend(f[-3:])             # first 3 and last 3 columns
+f[:].remove(f[str])              # all columns except strings
+f[:10].remove(f.A)               # first 10 columns without column "A"
+
+# extend with a computed column
+f[:].extend({"cost": f.price * f.quantity})
+```
+
+Removing a column that is not in the columnset is safe — missing columns are silently ignored. You cannot remove a transformed (computed) column.
+
+## Arithmetic and comparison expressions
+
+f-expressions support standard arithmetic operators and comparisons. These compose into new expressions:
+
+```python
+f.A + f.B          # sum of two columns
+f.price * f.qty    # product
+f.A - f.B
+f.A / f.B
+
+f.price > 0                          # boolean filter
+f.score >= 0.5
+(f.A > 10) & (f.B < 5)              # logical AND
+(f.A > 10) | (f.B < 5)              # logical OR
+```
+
+Use these in the `i` row selector:
+
+```python
+DT[f.price > 0, :]
+DT[(f.score >= 0.5) & (f.label == "good"), :]
+```
+
+Use them in the `j` column selector to compute new columns:
+
+```python
+DT[:, {"A": f.A, "B": f.B, "A+B": f.A + f.B, "A-B": f.A - f.B}]
+```
+
+Combine with aggregation functions for more complex selections:
+
+```python
+from datatable import f, mean, sd
+
+DT[(f.A > mean(f.B) + 2.5 * sd(f.B)) | (f.A < -mean(f.B) - sd(f.B)), :]
+```
+
+Normalize a column to `[0, 1]`:
+
+```python
+from datatable import f, min, max
+
+DT[:, (f.A - min(f.A)) / (max(f.A) - min(f.A))]
+```
+
+## The g symbol
+
+The module also exports `g`, a second frame proxy used when joining frames. Inside a `join()` expression, `g` refers to columns of the joined frame while `f` refers to the primary frame:
+
+```python
+from datatable import f, g, join, sum
+
+DT[:, sum(f.quantity * g.price), join(products)]
+```
+
+See the quick-start guide for full join examples.
+
+## DT.export_names()
+
+The `.export_names()` helper returns a tuple of f-expressions, one per column, named after each column. This lets you omit the `f.` prefix when writing complex expressions:
+
+```python
+Id, Price, Quantity = DT.export_names()
+
+DT[:, [Id, Price, Quantity, Price * Quantity]]
+```
+
+This is equivalent to:
+
+```python
+DT[:, [f.Id, f.Price, f.Quantity, f.Price * f.Quantity]]
+```

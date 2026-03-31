@@ -1,0 +1,174 @@
+---
+title: "Joining Frames"
+description: "Perform left outer joins between frames using join(), set key columns to enable joining, and reference joined-frame columns with the g. prefix."
+---
+
+datatable's `join()` implements a **left outer join**: every row in the left frame is kept, and matching values from the right (keyed) frame are looked up and appended as additional columns.
+
+```python
+from datatable import dt, f, g, join, update
+```
+
+---
+
+## How Joining Works
+
+<Steps>
+  <Step title="Key the right frame">
+    Set one or more columns as the key on the frame you want to join **from**. The key column must contain unique values — it acts like a lookup table.
+  </Step>
+  <Step title="Join into the left frame">
+    Use `DT[:, :, join(right_frame)]` in the square-bracket selector. datatable matches rows in the left frame against the key in the right frame by column name.
+  </Step>
+  <Step title="Reference joined columns with g.">
+    Inside `j` or `update()`, use `g.<column>` to refer to columns from the joined frame, just as you use `f.<column>` for the left frame.
+  </Step>
+</Steps>
+
+---
+
+## Basic Join
+
+```python
+df1 = dt.Frame("""    date    X1  X2
+                  01-01-2020  H   10
+                  01-02-2020  H   30
+                  01-03-2020  Y   15
+                  01-04-2020  Y   20""")
+
+df2 = dt.Frame("""X1  X3
+                  H   5
+                  Y   10""")
+```
+
+Set the key on the right frame. The key column (`X1`) must exist in the left frame under the same name:
+
+```python
+df2.key = "X1"
+```
+
+Now join:
+
+```python
+df1[:, :, join(df2)]
+```
+
+```
+   | date        X1     X2     X3
+   | str32       str32  int32  int32
+-- + ----------  -----  -----  -----
+ 0 | 01-01-2020  H         10      5
+ 1 | 01-02-2020  H         30      5
+ 2 | 01-03-2020  Y         15     10
+ 3 | 01-04-2020  Y         20     10
+[4 rows x 4 columns]
+```
+
+All rows from `df1` are preserved. The `X3` column from `df2` is appended, matched on `X1`.
+
+---
+
+## Setting a Key
+
+Assign a string (single key) or list of strings (composite key) to `frame.key`:
+
+```python
+df2.key = "X1"           # single-column key
+df2.key = ["X1", "X2"]   # multi-column key
+```
+
+<Warning>
+The key column(s) must contain **unique** values. If the right frame has duplicate keys, datatable will raise an error. The key column(s) must also share the same name(s) as the corresponding column(s) in the left frame.
+</Warning>
+
+---
+
+## Referencing Joined Columns with `g.`
+
+Use `g.<column>` inside `j` or `update()` to reference columns from the joined frame:
+
+```python
+df1[:, update(X2=f.X2 * g.X3), join(df2)]
+df1
+```
+
+```
+   | date        X1     X2
+   | str32       str32  int32
+-- + ----------  -----  -----
+ 0 | 01-01-2020  H         50
+ 1 | 01-02-2020  H        150
+ 2 | 01-03-2020  Y        150
+ 3 | 01-04-2020  Y        200
+[4 rows x 3 columns]
+```
+
+Here `f.X2` refers to the left frame's `X2` column and `g.X3` refers to the joined frame's `X3` column. The result is stored back in `X2` in-place.
+
+---
+
+## Selecting Specific Columns from the Join
+
+You can pick exactly which columns to include from both frames:
+
+```python
+# Only bring in the joined column, discard others from df1 or df2 selectively
+df1[:, [f.date, f.X2, g.X3], join(df2)]
+```
+
+---
+
+## Filtering Using Joined Data
+
+Apply a row filter that references columns from the joined frame:
+
+```python
+# Keep only rows where the multiplier from df2 is greater than 5
+df1[g.X3 > 5, :, join(df2)]
+```
+
+```
+   | date        X1     X2
+   | str32       str32  int32
+-- + ----------  -----  -----
+ 0 | 01-03-2020  Y         15
+ 1 | 01-04-2020  Y         20
+[2 rows x 3 columns]
+```
+
+---
+
+## Multi-Column Keys
+
+For composite keys, set `frame.key` to a list:
+
+```python
+lookup = dt.Frame({
+    "country": ["US", "US", "UK"],
+    "year":    [2020, 2021, 2020],
+    "rate":    [0.1, 0.12, 0.09],
+})
+lookup.key = ["country", "year"]
+
+data = dt.Frame({
+    "country": ["US", "UK", "US"],
+    "year":    [2020, 2020, 2021],
+    "amount":  [1000, 500, 800],
+})
+
+data[:, :, join(lookup)]
+```
+
+datatable matches on the combination of both key columns.
+
+---
+
+## Notes and Limitations
+
+<Note>
+datatable currently supports **left outer joins** only. Every row in the left frame is kept. Rows in the left frame with no match in the right frame will have `NA` for the joined columns.
+</Note>
+
+- The join key column(s) must be present in the left frame with **identical names**.
+- The right frame must be explicitly keyed before joining — passing an unkeyed frame raises `ValueError`.
+- `g.` is only valid inside expressions that also include `join()`.

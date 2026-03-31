@@ -1,0 +1,401 @@
+---
+title: "Datatable vs R data.table"
+description: "Side-by-side comparison of Python datatable and R data.table syntax for common data manipulation operations."
+---
+
+Python's `datatable` is closely related to R's `data.table` and intentionally mirrors its API. Because of language differences, some operations look slightly different. This page maps the most common `data.table` patterns to their Python `datatable` equivalents.
+
+## Setup
+
+<Tabs>
+  <Tab title="Python datatable">
+    ```python
+    from datatable import dt, f, g, by, update, join, sort
+
+    DT = dt.Frame(
+        x=["b"] * 3 + ["a"] * 3 + ["c"] * 3,
+        y=[1, 3, 6] * 3,
+        v=range(1, 10),
+    )
+    ```
+  </Tab>
+  <Tab title="R data.table">
+    ```r
+    library(data.table)
+
+    DT = data.table(
+      x = rep(c("b", "a", "c"), each = 3),
+      y = c(1, 3, 6),
+      v = 1:9
+    )
+    ```
+  </Tab>
+</Tabs>
+
+## Subsetting Rows (`i`)
+
+<Tabs>
+  <Tab title="Python datatable">
+    ```python
+    DT[1, :]            # 2nd row (0-indexed)
+    DT[1:3, :]          # 2nd and 3rd rows
+    DT[[2, 1], :]       # 3rd then 2nd row
+    DT[[1, 4], :]       # 2nd and 5th rows
+    DT[1:5, :]          # rows 2 through 5
+    DT[4::-1, :]        # rows 5 down to 1 (reversed)
+    DT[-1, :]           # last row
+    DT[f.y > 2, :]      # all rows where y > 2
+    DT[(f.y > 2) & (f.v > 5), :]   # compound condition
+    DT[[0, slice(4, None)], :]      # all rows except 2, 3, 4
+    ```
+  </Tab>
+  <Tab title="R data.table">
+    ```r
+    DT[2]               # 2nd row (1-indexed)
+    DT[2:3]             # 2nd and 3rd rows
+    DT[3:2]             # 3rd then 2nd row
+    DT[c(2, 5)]         # 2nd and 5th rows
+    DT[2:5]             # rows 2 through 5
+    DT[5:1]             # rows 5 down to 1
+    DT[.N]              # last row
+    DT[y > 2]           # all rows where y > 2
+    DT[y > 2 & v > 5]   # compound condition
+    DT[!2:4]            # all rows except 2, 3, 4
+    ```
+  </Tab>
+</Tabs>
+
+<Note>
+R uses 1-based indexing and inclusive slices. Python uses 0-based indexing and exclusive end-of-slice. `DT[2]` in R is the 2nd row; in Python `DT[2]` selects the **3rd column**.
+
+In Python datatable, row selection with an f-expression always requires an explicit column selector: `DT[f.y == 3, :]` — not `DT[f.y == 3]`.
+</Note>
+
+## Sorting
+
+<Tabs>
+  <Tab title="Python datatable">
+    ```python
+    # Sort by x ascending
+    DT.sort("x")
+    DT[:, :, sort("x")]
+
+    # Sort by x descending
+    DT.sort(-f.x)
+    DT[:, :, sort(-f.x)]
+
+    # Sort by x ascending, y descending
+    DT.sort(f.x, -f.y)
+    DT[:, :, sort(f.x, -f.y)]
+    ```
+  </Tab>
+  <Tab title="R data.table">
+    ```r
+    # Sort by x ascending
+    DT[order(x), ]
+
+    # Sort by x descending
+    DT[order(-x)]
+
+    # Sort by x ascending, y descending
+    DT[order(x, -y)]
+    ```
+  </Tab>
+</Tabs>
+
+## Selecting Columns (`j`)
+
+<Tabs>
+  <Tab title="Python datatable">
+    ```python
+    DT[:, "v"]                     # Select column v
+    DT["v"]                        # Shorthand (single column)
+    DT[:, ["x", "v"]]              # Select multiple columns
+    DT[:, {"m": f.x}]              # Rename and select
+    DT[:, {"sv": dt.sum(f.v)}]     # Aggregate and rename
+    DT[:, [f.v, f.v * 2]]          # v and v doubled
+    DT[:, 1]                       # 2nd column (0-indexed)
+    DT[:, -1]                      # Last column
+    DT[:, f["x":"y"]]              # Columns x through y
+    DT[:, f[:].remove(f["x":"y"])] # Exclude columns x and y
+
+    # Select by variable
+    col = "v"
+    DT[:, col]
+
+    cols = ["v", "y"]
+    DT[:, cols]
+    ```
+  </Tab>
+  <Tab title="R data.table">
+    ```r
+    DT[, .(v)]                     # Select column v
+    DT[, .(x, v)]                  # Select multiple columns
+    DT[, .(m = x)]                 # Rename and select
+    DT[, .(sv = sum(v))]           # Aggregate and rename
+    DT[, .(v, v*2)]                # v and v doubled
+    DT[, 2]                        # 2nd column
+    DT[, ncol(DT), with=FALSE]     # Last column
+    DT[, .SD, .SDcols = x:y]       # Columns x through y
+    DT[, .SD, .SDcols = !x:y]      # Exclude columns x and y
+
+    # Select by variable
+    col = "v"
+    DT[, ..col]
+
+    cols = c("v", "y")
+    DT[, ..cols]
+    ```
+  </Tab>
+</Tabs>
+
+## Filtering and Aggregating Together
+
+<Tabs>
+  <Tab title="Python datatable">
+    ```python
+    # Sum v over rows 2 and 3 (0-indexed)
+    DT[1:3, dt.sum(f.v)]
+
+    # Same with new column name
+    DT[1:3, {"sv": dt.sum(f.v)}]
+
+    # Filter in i, aggregate in j
+    DT[f.x == "b", dt.sum(f.v * f.y)]
+
+    # Return as scalar
+    DT[f.x == "b", dt.sum(f.v * f.y)][0, 0]
+
+    # Aggregate multiple columns
+    DT[:, dt.mean([f.y, f.v])]
+    ```
+  </Tab>
+  <Tab title="R data.table">
+    ```r
+    # Sum v over rows 2 and 3
+    DT[2:3, .(sum(v))]
+
+    # Same with new column name
+    DT[2:3, .(sv = sum(v))]
+
+    # Filter in i, aggregate in j
+    DT[x == "b", .(sum(v * y))]
+
+    # Return as scalar
+    DT[x == "b", sum(v * y)]
+
+    # Aggregate multiple columns
+    DT[, lapply(.SD, mean), .SDcols = c("y", "v")]
+    ```
+  </Tab>
+</Tabs>
+
+## Grouping with `by`
+
+<Tabs>
+  <Tab title="Python datatable">
+    ```python
+    # Sum v by x
+    DT[:, dt.sum(f.v), by("x")]
+
+    # Filter first, then group (chaining required)
+    DT[f.x != "a", :][:, dt.sum(f.v), by("x")]
+
+    # Row count per group
+    DT[:, dt.count(), by("x")]
+
+    # First row per group
+    DT[0, :, by("x")]
+
+    # Row count + sum of all columns per group
+    DT[:, [dt.count(), dt.sum(f[:])], by("x")]
+
+    # Expression in by
+    DT[:, dt.sum(f.v), by(f.y % 2)]
+
+    # Row where v is minimum per group
+    DT[0, f[:], by("x"), dt.sort(f.v)]
+
+    # First 2 rows per group
+    DT[:2, :, by("x")]
+
+    # Last 2 rows per group
+    DT[-2:, :, by("x")]
+
+    # Multiple aggregations
+    DT[:, {"MySum": dt.sum(f.v),
+            "MyMin": dt.min(f.v),
+            "MyMax": dt.max(f.v)},
+       by(f.x, f.y % 2)]
+    ```
+  </Tab>
+  <Tab title="R data.table">
+    ```r
+    # Sum v by x
+    DT[, sum(v), by = x]
+
+    # Filter first, then group
+    DT[x != "a", sum(v), by = x]
+
+    # Row count per group
+    DT[, .N, by = x]
+
+    # First row per group
+    DT[, .SD[1], by = x]
+
+    # Row count + sum of all columns per group
+    DT[, c(.N, lapply(.SD, sum)), by = x]
+
+    # Expression in by
+    DT[, sum(v), by = .(y %% 2)]
+
+    # Row where v is minimum per group
+    DT[, .SD[which.min(v)], by = x]
+
+    # First 2 rows per group
+    DT[, head(.SD, 2), by = x]
+
+    # Last 2 rows per group
+    DT[, tail(.SD, 2), by = x]
+
+    # Multiple aggregations
+    DT[, list(MySum = sum(v),
+              MyMin = min(v),
+              MyMax = max(v)),
+       by = .(x, y %% 2)]
+    ```
+  </Tab>
+</Tabs>
+
+<Note>
+In R's `data.table`, the order of groups in the result is preserved from the source data. In Python `datatable`, results are sorted by the grouping column. Use `keyby` in R (or accept default behavior) to get a sorted result equivalent to datatable's output.
+</Note>
+
+## Adding, Updating, and Deleting Columns
+
+<Tabs>
+  <Tab title="Python datatable">
+    ```python
+    # Add a new column
+    DT[:, update(z=42)]
+    DT["z"] = 42
+
+    # Add multiple columns
+    DT[:, update(sv=dt.sum(f.v), mv="X")]
+
+    # Delete a column
+    del DT["z"]
+    DT = DT[:, f[:].remove(f.z)]
+
+    # Update rows matching a condition
+    DT[f.x == "a", update(v=42)]
+    DT[f.x == "a", "v"] = 42
+
+    # Update a new column only for matching rows (NA elsewhere)
+    DT[f.x == "b", update(v2=84)]
+
+    # Add column computed per group
+    DT[:, update(m=dt.mean(f.v)), by("x")]
+
+    # Dynamic column name via variable
+    col = "rar"
+    DT[col] = 4242
+    ```
+  </Tab>
+  <Tab title="R data.table">
+    ```r
+    # Add a new column
+    DT[, z := 42L]
+
+    # Add multiple columns
+    DT[, c("sv", "mv") := .(sum(v), "X")]
+
+    # Delete a column
+    DT[, z := NULL]
+
+    # Update rows matching a condition
+    DT["a", v := 42L, on = "x"]
+
+    # Update a new column only for matching rows (NA elsewhere)
+    DT["b", v2 := 84L, on = "x"]
+
+    # Add column computed per group
+    DT[, m := mean(v), by = x]
+
+    # Dynamic column name
+    col = "rar"
+    DT[, ..col := 4242]
+    ```
+  </Tab>
+</Tabs>
+
+<Note>
+`update()` and the `del` operator in datatable both operate in-place — no reassignment is needed. `update()` also preserves row order even inside a `by()`, which is useful for per-group transforms.
+</Note>
+
+## Joins
+
+<Tabs>
+  <Tab title="Python datatable">
+    ```python
+    DT = dt.Frame(x=["b"] * 3 + ["a"] * 3 + ["c"] * 3,
+                  y=[1, 3, 6] * 3,
+                  v=range(1, 10))
+    X = dt.Frame({"x": ("c", "b"), "v": (8, 7), "foo": (4, 2)})
+    X.key = "x"
+
+    # Left outer join
+    DT[:, :, join(X)]
+
+    # Inner join (filter out unmatched rows)
+    DT[g[-1] != None, :, join(X)]
+
+    # Not join (rows in DT with no match in X)
+    DT[g[-1] == None, f[:], join(X)]
+
+    # First row per match group
+    DT[g[-1] != None, :, join(X)][0, :, by("x")]
+
+    # Aggregate j from both frames
+    DT[:, dt.sum(f.v * g.foo), join(X), by(f.x)][f[-1] != 0, :]
+    ```
+  </Tab>
+  <Tab title="R data.table">
+    ```r
+    DT = data.table(x = rep(c("b","a","c"), each=3),
+                    y = c(1, 3, 6), v = 1:9)
+    X = data.table(x = c("c","b"), v = 8:7, foo = c(4, 2))
+
+    # Left outer join
+    X[DT, on = "x"]
+
+    # Inner join
+    DT[X, on = "x", nomatch = NULL]
+
+    # Not join
+    DT[!X, on = "x"]
+
+    # First row per match group
+    DT[X, on = "x", mult = "first"]
+
+    # Aggregate j from both frames
+    DT[X, sum(v) * foo, by = .EACHI, on = "x"]
+    ```
+  </Tab>
+</Tabs>
+
+<Warning>
+datatable currently supports **left outer joins only**. The joining frame must be keyed, key columns must be unique, and the join column must have the same name in both frames.
+</Warning>
+
+## Key Differences to Keep in Mind
+
+| Concept | R data.table | Python datatable |
+|---|---|---|
+| Indexing base | 1-based | 0-based |
+| Slice end | Inclusive (`2:5` = rows 2,3,4,5) | Exclusive (`2:5` = rows 2,3,4) |
+| Row selection alone | `DT[y > 2]` works | Must include column selector: `DT[f.y > 2, :]` |
+| Group order | Preserved from source | Sorted by grouping column |
+| In-place update | `:=` operator | `update()` or direct assignment |
+| Join type | Multiple join types | Left outer join only |
+| `i` execution with `by` | `i` runs before grouping | `i` runs after grouping |

@@ -1,0 +1,325 @@
+---
+title: "Reading and Writing Data"
+description: "Read CSV, TSV, compressed files, URLs, and Excel with fread(); iterate over multiple files with iread(); write frames to CSV, Jay binary format, pandas, NumPy, and more."
+---
+
+datatable provides `fread()` for fast, multi-threaded reading of tabular data from almost any source, and several `to_*` methods for exporting frames.
+
+```python
+from datatable import dt, fread
+```
+
+---
+
+## Reading Data with `fread()`
+
+`fread()` auto-detects format, delimiter, header, and column types. It supports CSV, TSV, Jay, XLSX, and plain text, including data embedded in archives.
+
+### From a file
+
+```python
+fread('iris.csv')
+```
+
+### From a string (inline text)
+
+```python
+data = ('col1,col2,col3\n'
+        'a,b,1\n'
+        'a,b,2\n'
+        'c,d,3')
+fread(data)
+```
+
+### From a URL
+
+```python
+url = "https://raw.githubusercontent.com/Rdatatable/data.table/master/vignettes/flights14.csv"
+fread(url)
+```
+
+### From an archive
+
+```python
+fread("data.zip/mtcars.csv")      # target a specific file inside the zip
+```
+
+### From an Excel file
+
+```python
+fread("excel.xlsx")               # first sheet
+fread("excel.xlsx/Sheet1")        # specific sheet
+```
+
+<Note>
+`xlrd` must be installed to read `.xls` / `.xlsx` files. Use `iread()` to read multiple sheets at once — it returns an iterator of frames.
+</Note>
+
+### From the command line
+
+```python
+fread(cmd="""cat netflix.tsv | awk 'NR==1; /^2015-/'""")
+```
+
+---
+
+## Key `fread()` Parameters
+
+### Delimiter (`sep`)
+
+`fread` auto-detects the separator, but you can override it:
+
+```python
+data = "1:2:3:4\n5:6:7:8\n9:10:11:12"
+fread(data, sep=":")
+```
+
+The separator must be a single ASCII character; alphanumerics and quotes are not allowed.
+
+### Header (`header`)
+
+```python
+fread(data, header=False)            # treat first row as data, not header
+fread(data, header=False, columns=["A","B","C","D"])
+```
+
+### Custom column names and types (`columns`)
+
+<Tabs>
+  <Tab title="Rename all columns">
+    ```python
+    fread(data, columns=["A", "B", "C", "D"])
+    ```
+  </Tab>
+  <Tab title="Rename specific columns">
+    ```python
+    fread(data, columns={"a": "A", "b": "B"})
+    ```
+  </Tab>
+  <Tab title="Set types by name">
+    ```python
+    fread(data, columns={"a": dt.float32, "b": dt.str32})
+    ```
+  </Tab>
+  <Tab title="Set types by position">
+    ```python
+    # None means skip (exclude) that column
+    fread(data, columns=[dt.int32, dt.str32, None, dt.float32])
+    ```
+  </Tab>
+  <Tab title="Set all columns to one type">
+    ```python
+    fread(data, columns=dt.float32)
+    ```
+  </Tab>
+  <Tab title="Dynamic filter function">
+    ```python
+    def colfilter(columns):
+        return [col.name == 'species' or "length" in col.name
+                for col in columns]
+
+    fread('iris.csv', columns=colfilter, max_nrows=5)
+    ```
+  </Tab>
+</Tabs>
+
+### Selecting a subset of columns
+
+<Tabs>
+  <Tab title="By name set">
+    ```python
+    fread(data, columns={"a", "b"})
+    ```
+  </Tab>
+  <Tab title="By slice">
+    ```python
+    fread(data, columns=slice(1, 3))   # columns at index 1 and 2
+    ```
+  </Tab>
+  <Tab title="Drop by None">
+    ```python
+    fread(data, columns={"B": None, "D": None})   # keep A and C
+    ```
+  </Tab>
+  <Tab title="Keep one, drop rest">
+    ```python
+    fread(data, columns={"a": "a", ...: None})    # keep only 'a'
+    ```
+  </Tab>
+  <Tab title="Boolean mask">
+    ```python
+    fread(data, columns=[False, False, True, True])
+    ```
+  </Tab>
+</Tabs>
+
+### Null values (`na_strings`)
+
+```python
+fread(data, na_strings=['--', '', 'N/A'])
+```
+
+### Skip blank lines
+
+```python
+fread(data, skip_blank_lines=True)
+```
+
+### Skip to a line or string
+
+```python
+fread(data, skip_to_line=2)           # skip the first line
+fread(data, skip_to_string='first')   # start from the line containing "first"
+```
+
+These two parameters cannot be combined.
+
+### Limit rows
+
+```python
+fread(data, max_nrows=1000)
+```
+
+### Fill ragged rows
+
+```python
+# Rows with fewer fields than others are padded with NA
+fread(data, fill=True)
+```
+
+### Thread count
+
+```python
+fread('large.csv', nthreads=4)
+# default: all available threads (dt.options.nthreads)
+```
+
+---
+
+## Reading Multiple Files with `iread()`
+
+`iread()` returns an **iterator** of frames — useful for archives with multiple files, Excel workbooks with multiple sheets, or a list of paths:
+
+```python
+from datatable import iread
+
+for frame in iread("data.zip"):
+    print(frame.shape)
+```
+
+<Tip>
+`iread()` is the correct choice when a zip archive contains multiple CSV files or an Excel workbook has multiple sheets. `fread()` with a multi-source input will warn and only read the first source.
+</Tip>
+
+---
+
+## Writing Data
+
+### CSV — `DT.to_csv()`
+
+<Tabs>
+  <Tab title="Write to file">
+    ```python
+    DT.to_csv("output.csv")
+    ```
+  </Tab>
+  <Tab title="Return as string">
+    ```python
+    csv_text = DT.to_csv()   # path=None → returns str
+    ```
+  </Tab>
+  <Tab title="Gzip compressed">
+    ```python
+    DT.to_csv("output.csv.gz", compression="gzip")
+    ```
+  </Tab>
+  <Tab title="Append to existing file">
+    ```python
+    DT.to_csv("log.csv", append=True)
+    # header is suppressed automatically when appending to an existing file
+    ```
+  </Tab>
+  <Tab title="Custom separator">
+    ```python
+    DT.to_csv("output.tsv", sep="\t")
+    ```
+  </Tab>
+</Tabs>
+
+Key parameters:
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `path` | `None` | File path. If `None`, returns a string. |
+| `sep` | `","` | Field separator (single character). |
+| `quoting` | `"minimal"` | When to quote fields: `"minimal"`, `"all"`, `"nonnumeric"`, `"none"`. |
+| `append` | `False` | Append to existing file instead of overwriting. |
+| `header` | `"auto"` | Write column names. Auto-suppressed when appending. |
+| `compression` | `None` | `"gzip"` or `"auto"` (infers from file extension). |
+| `bom` | `False` | Write UTF-8 byte-order mark (useful for Excel compatibility). |
+
+### Jay binary format — `DT.to_jay()`
+
+`.jay` is datatable's native binary format. It preserves all type information and can be read back by `fread()` with zero parsing overhead.
+
+<Tabs>
+  <Tab title="Write to file">
+    ```python
+    DT.to_jay("data.jay")
+    ```
+  </Tab>
+  <Tab title="Return as bytes">
+    ```python
+    payload = DT.to_jay()   # path=None → returns bytes
+    ```
+  </Tab>
+  <Tab title="Read back">
+    ```python
+    DT2 = fread("data.jay")
+    ```
+  </Tab>
+</Tabs>
+
+<Tip>
+Use `.jay` files for caching intermediate results or sharing frames between datatable processes. Read/write speeds are significantly faster than CSV because no parsing is needed.
+</Tip>
+
+### pandas — `DT.to_pandas()`
+
+```python
+pdf = DT.to_pandas()
+# Returns a pandas.DataFrame
+# If DT has key columns, those become the DataFrame index
+```
+
+<Note>
+`pandas` must be installed. If the frame has key columns set, they will become the index columns in the resulting DataFrame.
+</Note>
+
+### NumPy — `DT.to_numpy()`
+
+```python
+arr = DT.to_numpy()
+# Returns a numpy.ndarray of shape (nrows, ncols)
+```
+
+### Dict — `DT.to_dict()`
+
+```python
+d = DT.to_dict()
+# Returns {column_name: [values, ...], ...}
+```
+
+---
+
+## Thousand Separator Detection
+
+`fread` automatically detects commas used as thousand separators (assumes `,`):
+
+```python
+fread("""Name|Salary|Position
+         James|256,000|evangelist
+         Ragnar|1,000,000|conqueror
+         Loki|250360|trickster""")
+# Salary column is read as int32: 256000, 1000000, 250360
+```

@@ -1,0 +1,125 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "Datatable",
+  "projectDescription": "A high-performance Python library for manipulating 2-dimensional tabular data structures (DataFrames), optimized for big data processing on single-node machines.",
+  "theme": "luma",
+  "primaryColor": "#3d79ab",
+  "lightColor": "#e8d55c",
+  "darkColor": "#486b3a",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/frame",
+              "concepts/f-expressions",
+              "concepts/dtypes"
+            ]
+          },
+          {
+            "group": "Working with Data",
+            "pages": [
+              "guides/selecting-filtering",
+              "guides/transforming",
+              "guides/groupby",
+              "guides/joining",
+              "guides/reading-writing"
+            ]
+          },
+          {
+            "group": "Machine Learning",
+            "pages": [
+              "guides/ftrl-model",
+              "guides/linear-model"
+            ]
+          },
+          {
+            "group": "Migration & Comparisons",
+            "pages": [
+              "comparisons/pandas",
+              "comparisons/r-datatable",
+              "comparisons/sql"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Core",
+            "pages": [
+              "api/frame",
+              "api/fexpr",
+              "api/types"
+            ]
+          },
+          {
+            "group": "Functions",
+            "pages": [
+              "api/io",
+              "api/aggregation",
+              "api/row-functions",
+              "api/set-operations"
+            ]
+          },
+          {
+            "group": "Modules",
+            "pages": [
+              "api/math",
+              "api/string",
+              "api/time",
+              "api/models",
+              "api/options"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Column-oriented data storage with native C++ implementation for all data types including strings",
+    "Expressive DT[i, j, by(...)] query syntax inspired by R's data.table",
+    "Multi-threaded data processing utilizing all CPU cores",
+    "Fast CSV/text/Excel reading with automatic format detection via fread()",
+    "Memory-mapped datasets for out-of-memory big data processing",
+    "Full support for null values across all data types",
+    "Efficient algorithms for sorting, grouping, and joining",
+    "Interoperability with pandas, numpy, pyarrow, and pure Python",
+    "Built-in FTRL and Linear Model machine learning algorithms",
+    "Binary .jay file format for fast disk storage and retrieval"
+  ],
+  "publicApiSurface": [
+    "dt.Frame — primary 2D data structure",
+    "dt.fread() — fast CSV/text/Excel reader",
+    "dt.iread() — iterator for reading multiple files",
+    "dt.f / dt.g — column reference symbols for expressions",
+    "dt.by() — groupby modifier",
+    "dt.join() — join modifier",
+    "dt.sort() — sort modifier",
+    "dt.update() — in-place frame update",
+    "dt.rbind() / dt.cbind() — row/column binding",
+    "dt.union() / dt.intersect() / dt.setdiff() / dt.symdiff() — set operations",
+    "dt.ifelse() — conditional expression",
+    "dt.cut() / dt.qcut() — binning functions",
+    "dt.shift() / dt.fillna() — window/fill functions",
+    "dt.cumsum() / dt.cummax() / dt.cummin() / dt.cumprod() — cumulative functions",
+    "dt.rowsum() / dt.rowmax() / dt.rowmin() / dt.rowmean() — row-wise aggregations",
+    "dt.mean() / dt.sum() / dt.min() / dt.max() / dt.sd() / dt.count() — aggregation functions",
+    "dt.models.Ftrl — FTRL online learning model",
+    "dt.models.LinearModel — linear regression/classification model",
+    "dt.stype / dt.ltype / dt.Type — data type system",
+    "dt.options — global configuration settings"
+  ]
+}

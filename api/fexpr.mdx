@@ -1,0 +1,342 @@
+---
+title: "FExpr and Column Selectors"
+description: "API reference for FExpr, the f and g column selector symbols, and all supported expression operations."
+---
+
+`FExpr` is a class that encapsulates a deferred computation to be performed on a frame. Rather than producing data immediately, an `FExpr` records what to compute. The computation is resolved when the expression is used inside `DT[i, j, ...]`.
+
+`FExpr` objects are rarely constructed directly. They are produced by accessing columns through the `f` and `g` namespace symbols, and by combining those with operators or functions.
+
+```python
+import datatable as dt
+from datatable import f, g
+
+# f.Angle creates an FExpr; multiplying by 2 creates another FExpr
+DT[:, dt.math.sin(2 * f.Angle)]
+```
+
+Because evaluation is deferred, validity is checked at evaluation time, not at construction time. The same expression may succeed on one frame and fail on another (for example, if the referenced column does not exist in the second frame).
+
+## The `f` and `g` symbols
+
+`f` refers to columns of the **current frame** (the left operand of `DT[...]`).
+
+`g` refers to columns of the **joined frame** when performing a join operation.
+
+Both are instances of `dt.Namespace` and support the same selection syntax.
+
+```python
+DT[:, f.Age]                  # column "Age" from DT
+DT[:, f["Age"]]               # same, using subscript
+DT[:, f[0]]                   # first column
+DT[:, f[-1]]                  # last column
+```
+
+## Column selection
+
+### By name or index
+
+```python
+f["column_name"]   # by name
+f.column_name      # attribute shortcut (simple names only)
+f[0]               # first column
+f[-1]              # last column
+```
+
+### By slice
+
+```python
+f[:3]              # first 3 columns (stop excluded, integer slice)
+f[1:4]             # columns 1, 2, 3
+f["A":"C"]         # columns A through C inclusive (string slice, both ends included)
+```
+
+<Note>
+Integer slices follow Python conventions: the stop value is **not** included. String slices are inclusive on both ends.
+</Note>
+
+### By type
+
+Select all columns matching a given type:
+
+```python
+f[int]             # all integer columns
+f[float]           # all float columns
+f[str]             # all string columns
+f[dt.Type.int32]   # columns of exactly int32 type
+f[dt.stype.str32]  # columns of exactly str32 stype
+f[dt.ltype.real]   # all real (float) columns
+```
+
+### Multiple selectors
+
+```python
+f[0, -1]           # first and last columns
+f["A", "B"]        # columns A and B
+f[int, float]      # all int and float columns
+f[None]            # empty columnset
+```
+
+## Construction
+
+### `FExpr(e)`
+
+Create a new `FExpr` from `e`. This constructor is rarely called directly.
+
+<ParamField path="e" type="None | bool | int | str | float | slice | list | tuple | dict | type | stype | ltype | Generator | FExpr | Frame | range | pd.DataFrame | pd.Series | np.array">
+  The value to wrap as an `FExpr`.
+</ParamField>
+
+### `alias(*names)`
+
+Assign new names to the columns produced by this `FExpr`.
+
+<ParamField path="names" type="str | List[str] | Tuple[str]">
+  New names for the columns.
+</ParamField>
+
+Returns a new `FExpr`.
+
+```python
+DT[:, f[:].alias("x", "y", "z")]
+DT[:, (f.A * f.B).alias("product")]
+```
+
+### `extend(arg)`
+
+Append another `FExpr`'s columns to this one, combining two column sets into a single expression. Similar to `cbind()`.
+
+<ParamField path="arg" type="FExpr">
+  The expression to append.
+</ParamField>
+
+Returns a new `FExpr`.
+
+```python
+DT[:, f[:2].extend(f["extra_col"])]
+```
+
+### `remove(arg)`
+
+Remove columns from this `FExpr`. The argument must reference columns by position, name, or type (not computed columns).
+
+<ParamField path="arg" type="FExpr">
+  Columns to remove. Must be "by-reference" selections.
+</ParamField>
+
+Returns a new `FExpr`.
+
+```python
+DT[:, f[:].remove(f["id", "ts"])]  # all columns except id and ts
+```
+
+## Arithmetic operators
+
+All binary operators work when either or both operands are `FExpr`s.
+
+| Operator | Expression | Description |
+|----------|-----------|-------------|
+| `+` | `x + y` | Addition |
+| `-` | `x - y` | Subtraction |
+| `*` | `x * y` | Multiplication |
+| `/` | `x / y` | True division |
+| `//` | `x // y` | Integer (floor) division |
+| `%` | `x % y` | Modulus (remainder after integer division) |
+| `**` | `x ** y` | Exponentiation |
+| `+x` | `+x` | Unary plus |
+| `-x` | `-x` | Unary negation |
+
+```python
+DT[:, f.price * f.quantity]        # product
+DT[:, (f.high + f.low) / 2]       # average of two columns
+DT[:, f.score ** 2]                # square
+DT[:, f.total % 10]                # remainder
+```
+
+## Bitwise operators
+
+| Operator | Expression | Description |
+|----------|-----------|-------------|
+| `&` | `x & y` | Bitwise AND (also used as logical AND for boolean columns) |
+| `\|` | `x \| y` | Bitwise OR (also used as logical OR for boolean columns) |
+| `^` | `x ^ y` | Bitwise XOR |
+| `~` | `~x` | Bitwise NOT (also logical NOT for booleans) |
+| `<<` | `x << y` | Left shift |
+| `>>` | `x >> y` | Right shift |
+
+```python
+# Boolean / logical usage
+DT[f.age > 18, :]                  # row filter
+DT[(f.age > 18) & (f.score > 80), :]   # AND
+DT[(f.city == "NY") | (f.city == "LA"), :]  # OR
+DT[~f.is_deleted, :]               # NOT
+```
+
+## Comparison operators
+
+| Operator | Expression | Description |
+|----------|-----------|-------------|
+| `==` | `x == y` | Equal |
+| `!=` | `x != y` | Not equal |
+| `<` | `x < y` | Less than |
+| `<=` | `x <= y` | Less than or equal |
+| `>` | `x > y` | Greater than |
+| `>=` | `x >= y` | Greater than or equal |
+
+```python
+DT[f.status == "active", :]
+DT[f.count != 0, :]
+DT[f.score >= 90, :]
+```
+
+## Aggregation methods
+
+These methods on `FExpr` are equivalent to the corresponding top-level `dt.*` functions and can be applied per-group with `by()`.
+
+| Method | Description |
+|--------|-------------|
+| `.sum()` | Sum of values |
+| `.min()` | Minimum value |
+| `.max()` | Maximum value |
+| `.mean()` | Mean value |
+| `.median()` | Median value |
+| `.sd()` | Standard deviation |
+| `.count()` | Count of non-NA values |
+| `.countna()` | Count of NA values |
+| `.nunique()` | Number of unique values |
+| `.prod()` | Product of values |
+| `.first()` | First value |
+| `.last()` | Last value |
+
+```python
+DT[:, f.sales.sum()]
+DT[:, f.revenue.mean(), dt.by("region")]
+DT[:, f.price.min()]
+```
+
+## Row-wise methods
+
+These methods operate across columns row-by-row, returning a single column.
+
+| Method | Description |
+|--------|-------------|
+| `.rowsum()` | Row-wise sum across columns |
+| `.rowmin()` | Row-wise minimum |
+| `.rowmax()` | Row-wise maximum |
+| `.rowmean()` | Row-wise mean |
+| `.rowsd()` | Row-wise standard deviation |
+| `.rowcount()` | Count of non-NA values per row |
+| `.rowfirst()` | First non-NA value per row |
+| `.rowlast()` | Last non-NA value per row |
+| `.rowargmin()` | Column index of the minimum per row |
+| `.rowargmax()` | Column index of the maximum per row |
+| `.rowall()` | True if all values in the row are True |
+| `.rowany()` | True if any value in the row is True |
+
+```python
+DT[:, f[int].rowsum()]   # sum of all integer columns per row
+DT[:, f[:].rowmean()]    # mean across all columns per row
+```
+
+## Cumulative methods
+
+| Method | Description |
+|--------|-------------|
+| `.cumsum()` | Cumulative sum |
+| `.cumprod()` | Cumulative product |
+| `.cummin()` | Cumulative minimum |
+| `.cummax()` | Cumulative maximum |
+
+```python
+DT[:, f.value.cumsum()]
+```
+
+## String methods
+
+### `len()`
+
+Length of each string in a string column.
+
+```python
+DT[:, f.name.len()]
+```
+
+### `re_match(pattern)`
+
+Check whether each string in a string column matches the given regex pattern. Returns a boolean column.
+
+<ParamField path="pattern" type="str">
+  A regular expression pattern.
+</ParamField>
+
+```python
+DT[f.email.re_match(r".+@.+\..+"), :]
+```
+
+### `FExpr[slice]`
+
+Apply a string slice to each element of a string column.
+
+<ParamField path="selector" type="slice">
+  Python slice applied to every string value in the column.
+</ParamField>
+
+Returns an `FExpr[str]`.
+
+```python
+DT[:, f.name[0:3]]          # first 3 characters
+DT[:, f.code[:-2]]          # all but last 2 characters
+DT[:, f.season[-f.i:]]      # dynamic suffix using another column
+```
+
+## Type casting
+
+### `as_type(new_type)`
+
+Cast the columns in this expression to a new type. Equivalent to `dt.as_type(expr, new_type)`.
+
+```python
+DT[:, f.score.as_type(dt.float32)]
+DT[:, f[:].as_type(str)]
+```
+
+## The `g` symbol for joins
+
+`g` refers to columns of the joined (right) frame in a join operation, in the same way that `f` refers to the left frame.
+
+```python
+result = DT[:, :, dt.join(lookup)]
+# After joining, g.column_name refers to lookup columns
+result = DT[:, [f.id, g.name], dt.join(lookup)]
+```
+
+<Note>
+`g` uses the same selector syntax as `f`. See the column selection section above.
+</Note>
+
+## Miscellaneous
+
+### `fillna(value)`
+
+Replace NA values in the expression with `value`.
+
+```python
+DT[:, f.score.fillna(0)]
+```
+
+### `shift(n=1)`
+
+Shift the column values by `n` rows (forward for positive, backward for negative).
+
+```python
+DT[:, f.price.shift(1)]   # previous row's value
+DT[:, f.price.shift(-1)]  # next row's value
+```
+
+### `categories()`
+
+Return the categories of a categorical column.
+
+### `codes()`
+
+Return the underlying integer codes of a categorical column.

@@ -1,0 +1,281 @@
+---
+title: "Grouping with by()"
+description: "Split a frame into groups, apply aggregations or transformations per group, filter within groups, and combine results — all with datatable's by() modifier."
+---
+
+`by()` implements a **split-apply-combine** strategy. It splits the frame into groups defined by one or more columns or expressions, evaluates `i` and `j` within each group, and then reassembles the results.
+
+```python
+from datatable import (dt, f, by, ifelse, update, sort,
+                       count, min, max, mean, sum, rowsum)
+```
+
+The three main use cases are:
+
+<CardGroup cols={3}>
+  <Card title="Aggregation" icon="chart-bar">
+    Reduce each group to a single row (count, sum, mean, …)
+  </Card>
+  <Card title="Transformation" icon="arrows-rotate">
+    Compute group-level values and append them back — frame shape is preserved
+  </Card>
+  <Card title="Filtration" icon="filter">
+    Select a subset of rows within each group using `i`
+  </Card>
+</CardGroup>
+
+---
+
+## Aggregation
+
+The aggregate function goes in the `j` position.
+
+### Group by one column
+
+```python
+df = dt.Frame("""Fruit   Date       Name  Number
+                 Apples  10/6/2016  Bob     7
+                 Apples  10/6/2016  Bob     8
+                 Apples  10/6/2016  Mike    9
+                 Apples  10/7/2016  Steve  10
+                 Apples  10/7/2016  Bob     1
+                 Oranges 10/7/2016  Bob     2
+                 Oranges 10/6/2016  Tom    15
+                 Oranges 10/6/2016  Mike   57
+                 Oranges 10/6/2016  Bob    65
+                 Oranges 10/7/2016  Tony    1
+                 Grapes  10/7/2016  Bob     1
+                 Grapes  10/7/2016  Tom    87
+                 Grapes  10/7/2016  Bob    22
+                 Grapes  10/7/2016  Bob    12
+                 Grapes  10/7/2016  Tony   15""")
+
+df[:, sum(f.Number), by('Fruit')]
+# Apples: 35, Grapes: 137, Oranges: 140
+```
+
+### Group by multiple columns
+
+```python
+df[:, sum(f.Number), by('Fruit', 'Name')]
+```
+
+### Multiple aggregate functions
+
+```python
+df[:, {"min": min(f.Number), "max": max(f.Number)}, by('Fruit', 'Date')]
+```
+
+### Aggregate over a column range
+
+```python
+df[:, sum(f["col3":"col4"]), by('col1', 'col2')]
+```
+
+### Different functions on different columns
+
+```python
+df[:, [max(f.col3), min(f.col4)], by('col1', 'col2')]
+```
+
+### Compute between aggregated values
+
+```python
+# Range (max - min) per group
+df[:, max(f.VALUE) - min(f.VALUE), by('GROUP')]
+```
+
+### Exclude grouping columns from output
+
+```python
+df[:, sum(f.Number), by('Fruit', add_columns=False)]
+```
+
+<Note>
+- The grouping column(s) always appear first in the result.
+- Grouping columns are sorted in ascending order by default.
+- To sort descending, negate the f-expression: `by(-f.Fruit)`.
+</Note>
+
+---
+
+## Group by Expressions
+
+### By column position
+
+```python
+df[:, sum(f.Number), by(f[0])]
+```
+
+### By boolean expression
+
+```python
+df[:, sum(f.Number), by(f.Fruit == "Apples")]
+```
+
+### By computed expression (e.g. bin numeric values)
+
+```python
+df[:, sum(f.Amount), by(ifelse(f.Number >= 5, "B", "A"))]
+```
+
+### By floor-divided value
+
+```python
+DT[:, :, by(dt.math.floor(f.A / 100))]
+```
+
+---
+
+## Transformation (preserving frame shape)
+
+Use `update()` inside a `by()` to append group-level values back to the original frame. The frame's row count is unchanged.
+
+### Append group min and max
+
+```python
+df[:, update(min_col=min(f.c), max_col=max(f.c)), by('y')]
+# min_col and max_col are appended; each row gets its group's value
+```
+
+### Fill missing values with group mean
+
+```python
+df[:, update(value=ifelse(f.value == None, mean(f.value), f.value)), by('name')]
+```
+
+### Compute a group-level ratio
+
+```python
+df[:, update(ratio=f.c / sum(f.c * f.d)), by('a', 'b')]
+```
+
+### Window-style computation (SQL analogue)
+
+```python
+df[:, update(ratio=dt.sum(f.liabilities) * 100 / dt.sum(f.assets)), by(f.exporter)]
+# Each row in a group gets the same group-level ratio
+```
+
+---
+
+## Filtration (select rows within groups)
+
+Pass an integer or slice to `i` to select specific rows within each group. Note that `i` is applied **after** grouping.
+
+```python
+df = dt.Frame("""A   B
+                 1  10
+                 1  20
+                 2  30
+                 2  40
+                 3  10""")
+
+# First row per group
+df[0, :, by('A')]
+
+# Last row per group
+df[-1, :, by('A')]
+
+# Second row per group (groups with fewer rows are omitted)
+df[1, :, by('A')]
+```
+
+<Note>
+f-expressions in the `i` section are not yet implemented for groupby. Only integers and slices are supported.
+</Note>
+
+### HAVING — filter groups by aggregate
+
+```python
+# Keep only groups where count > 1
+df[:, update(filter_col=count()), by('A')]
+df[f.filter_col > 1, f[:-1]]
+```
+
+### Filter rows by minimum value within group
+
+```python
+df[:, update(filter_col=f.diff == min(f.diff)), by('item')]
+df[f.filter_col == 1, :-1]
+```
+
+### Keep groups that contain both 0 and 1 in a column
+
+```python
+df[:, update(filter_col=sum(f.sale)), by('make')]
+df[f.filter_col == 1, :-1]
+```
+
+---
+
+## Using `sort()` with `by()`
+
+When `sort()` and `by()` are both present, sorting happens **within each group**.
+
+```python
+# Get the latest entry per group (sort date ascending, take last row)
+df[-1, :, by('id'), sort('date')]
+
+# Get rows with the highest count per word
+df[0, :, by('word'), sort(-f.count)]
+
+# Get min value row per category with renamed columns
+df[0, {"value_date": f.date, "value_min": f.value}, by("category"), sort('value')]
+```
+
+---
+
+## Nested and Conditional Aggregations
+
+### Row-sum of column groups, then aggregate
+
+```python
+df[:,
+   {"AB": sum(rowsum(f['A':'B'])),
+    "CD": sum(rowsum(f['C':'D']))},
+   by('cat')]
+```
+
+### Conditional sums
+
+```python
+df[:,
+   {"sum_up":      sum(f.B == "up"),
+    "sum_down":    sum(f.B == "down"),
+    "over_200_up": sum((f.B == "up") & (f.C > 200))},
+   by('A_id')]
+```
+
+### Aggregate on conditional values using `ifelse`
+
+```python
+df[:,
+   {"TMAX": max(ifelse(f.Element == "TMAX", f.Data_Value, None)),
+    "TMIN": min(ifelse(f.Element == "TMIN", f.Data_Value, None))},
+   by(f.Day)]
+```
+
+### Conditional group sum appended back to frame
+
+```python
+expression = ((f.Num == 17) | (f.Num == 12)) & (f.Letter == "D")
+df[:, update(Total=sum(expression * f.Count)), by(f.ID)]
+```
+
+---
+
+## Handling Null Values in Groups
+
+By default, `None` forms its own group:
+
+```python
+df[:, sum(f[:]), by('b')]
+# null values in 'b' appear as a separate group at the top
+```
+
+To exclude null groups, pre-filter before grouping:
+
+```python
+df[f.b != None, :][:, sum(f[:]), by('b')]
+```

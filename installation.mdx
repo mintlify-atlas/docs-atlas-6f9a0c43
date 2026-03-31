@@ -1,0 +1,168 @@
+---
+title: "Installation"
+description: "Install datatable on macOS, Linux, or Windows using pip, or build from source on other platforms."
+---
+
+## Requirements
+
+- Python 3.8+ (64-bit)
+- pip 20.3+
+
+datatable has no dependencies on other Python packages or non-standard system libraries.
+
+## Install with pip
+
+<Steps>
+  <Step title="Upgrade pip">
+    Make sure you are running pip 20.3 or later. Older versions will cause a `BackendUnavailable` error.
+
+    ```bash
+    pip install pip --upgrade
+    ```
+  </Step>
+  <Step title="Install datatable">
+    Install the latest stable release from PyPI:
+
+    ```bash
+    pip install datatable
+    ```
+
+    Binary wheels are provided for the following platforms:
+
+    | Platform | Details |
+    |---|---|
+    | macOS | Tested on macOS 10.12 (Sierra) through macOS 12 (Monterey) |
+    | Linux x86\_64 / ppc64le | `manylinux_2_17`-compatible distributions (see [PEP 600](https://peps.python.org/pep-0600/)) |
+    | Windows | Windows 10 or later |
+
+  </Step>
+  <Step title="Verify the installation">
+    Confirm datatable installed correctly:
+
+    ```python
+    import datatable as dt
+    print(dt.__version__)
+    ```
+
+    You should see the installed version number printed.
+  </Step>
+</Steps>
+
+## Install a development version
+
+If you want to test a pre-release build before it is officially published:
+
+<Tabs>
+  <Tab title="macOS / Linux">
+    Development wheels are published to an S3 repository. Browse [https://h2o-release.s3.amazonaws.com/datatable/index.html](https://h2o-release.s3.amazonaws.com/datatable/index.html), find the wheel for your Python version and platform, then install it:
+
+    ```bash
+    pip install YOUR_WHEEL_URL
+    ```
+  </Tab>
+  <Tab title="Windows">
+    Pre-built development wheels are available on [AppVeyor](https://ci.appveyor.com/project/h2oops/datatable/history). Open a successful main branch build, go to the **Artifacts** tab, copy the URL for your Python version, then install it:
+
+    ```bash
+    pip install YOUR_WHEEL_URL
+    ```
+  </Tab>
+</Tabs>
+
+## Build from source
+
+Use this path if you are on a platform without a prebuilt wheel, or if you want to contribute to datatable.
+
+### Install the latest source from GitHub
+
+```bash
+pip install git+https://github.com/h2oai/datatable
+```
+
+datatable is written mostly in C++, so your system needs a working C++ compiler. The build script searches for GCC, Clang, or MSVC automatically. To use a different compiler, set the `CXX` environment variable before running the install.
+
+The minimum supported compiler versions are:
+
+- Clang 5+
+- GCC 6+
+- MSVC 19.14+
+
+datatable uses the C++14 language standard.
+
+### Set up an editable development install
+
+If you want to modify datatable or add your own functionality:
+
+<Steps>
+  <Step title="Clone the repository">
+    Fork the repo on GitHub, then clone your fork:
+
+    ```bash
+    git clone https://github.com/your_user_name/datatable
+    cd datatable
+    ```
+  </Step>
+  <Step title="Build the core library">
+    ```bash
+    # Production build
+    make build
+
+    # Debug build (no optimizations, internal asserts enabled)
+    make debug
+    ```
+
+    <Note>
+      On macOS you may need Xcode Command Line Tools: run `xcode-select --install`.
+      On Linux, if you see `'Python.h' file not found`, install the development headers for your Python version, e.g. `python3.8-dev`.
+    </Note>
+
+    A successful build produces a `_datatable.*.so` file in `src/datatable/lib/`.
+  </Step>
+  <Step title="Register the source tree with Python">
+    ```bash
+    echo "`pwd`/src" >> ${VIRTUAL_ENV}/lib/python*/site-packages/easy-install.pth
+    ```
+
+    Adjust the path if you are not using a virtualenv.
+  </Step>
+  <Step title="Install test and extra dependencies">
+    ```bash
+    pip install -r requirements_tests.txt
+    pip install -r requirements_extra.txt
+    pip install -r requirements_docs.txt
+    ```
+  </Step>
+  <Step title="Run the test suite">
+    ```bash
+    make test
+    ```
+  </Step>
+</Steps>
+
+After the initial setup, subsequent development is simpler: re-run `make build` (or `make debug`) after any C++ change, then restart Python. Only modified files are recompiled, so incremental builds usually take a few seconds.
+
+## Troubleshooting
+
+**`pip._vendor.pep517.wrappers.BackendUnavailable`**
+Your pip version is too old. Upgrade to 20.3+ with `pip install pip --upgrade`.
+
+**`ImportError: cannot import name '_datatable'`**
+The internal `_datatable.*.so` core library is missing, in the wrong location, or has the wrong name. Reinstall datatable. If the file is present but not under `site-packages/datatable/lib/`, move it there. If the suffix doesn't match what Python expects, check it with:
+
+```python
+import sysconfig
+sysconfig.get_config_var("SOABI")
+```
+
+**`Python.h: no such file or directory`** (source builds on Linux)
+Install the Python development package: e.g., `sudo apt install python3.8-dev`.
+
+**`fatal error: 'sys/mman.h' file not found`** (source builds on macOS)
+Install Xcode Command Line Tools: `xcode-select --install`.
+
+**`ImportError: This package should not be accessible`**
+A misconfigured `PYTHONPATH` environment variable is shadowing the installation. Unset it and try again.
+
+---
+
+For questions not covered here, ask on [Stack Overflow](https://stackoverflow.com/questions/tagged/py-datatable) using the `[py-datatable]` tag, or file an issue on [GitHub](https://github.com/h2oai/datatable/issues).

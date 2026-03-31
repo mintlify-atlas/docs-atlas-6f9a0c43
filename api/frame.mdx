@@ -1,0 +1,599 @@
+---
+title: "Frame"
+description: "API reference for the datatable Frame class — a two-dimensional, column-oriented data container."
+---
+
+`Frame` is the primary data structure in `datatable`. It is two-dimensional (rows and columns) and column-oriented, meaning data is stored separately per column. Each column has its own name and type; types may differ across columns but are uniform within each column.
+
+A Frame is optimized for the case where the number of rows significantly exceeds the number of columns.
+
+```python
+import datatable as dt
+
+DT = dt.Frame(A=range(5), B=[1.1, 2.2, 3.3, 4.4, 5.5])
+```
+
+A Frame can be iterated as a sequence of single-column Frames (column-wise), or unpacked as a dictionary:
+
+```python
+for col in DT:
+    print(col)          # each col is a 1-column Frame
+
+d = {**DT}              # dict of {name: 1-col Frame}
+cols = [*DT]            # list of 1-column Frames
+```
+
+## Constructor
+
+```python
+dt.Frame(_data=None, *, names=None, types=None, type=None, **cols)
+```
+
+Create a new Frame from a single or multiple sources. The `_data` argument and keyword-column arguments `**cols` are mutually exclusive.
+
+<ParamField path="_data" type="Any">
+  The primary data source. Accepts a wide range of Python types:
+
+  - `list` of lists / Frames / numpy arrays — each element becomes one column
+  - `list` of dicts — each dict is a row; keys become column names
+  - `list` of tuples — each tuple is a row
+  - `list` of primitives — creates a single column
+  - `dict` — keys are column names, values are column data
+  - `range` — creates a virtual integer column instantly
+  - `Frame` — shallow copy of the given frame
+  - `str` — passed to `fread()` (file path, URL, or inline CSV text)
+  - `pandas.DataFrame` / `pandas.Series`
+  - `numpy.ndarray`
+  - `pyarrow.Table`
+  - `None` — creates an empty 0×0 frame
+</ParamField>
+
+<ParamField path="**cols" type="Any">
+  Keyword column initializers. Keys become column names, values are column data. Equivalent to passing a `dict` as `_data`. Cannot be combined with an explicit `_data` argument or with `names`.
+</ParamField>
+
+<ParamField path="names" type="List[str | None]">
+  Explicit column names. Length must match the number of columns. Incompatible with `**cols`. Pass `None` for an individual element to auto-generate that column's name.
+</ParamField>
+
+<ParamField path="types" type="List[Type] | Dict[str, Type]">
+  Explicit types for each column, as a list (positional) or dict (by name). Cannot be used together with `type`.
+</ParamField>
+
+<ParamField path="type" type="Type | type">
+  A single type applied to all columns. Cannot be used together with `types`.
+</ParamField>
+
+### Examples
+
+```python
+# From keyword arguments
+DT = dt.Frame(
+    A=range(7),
+    B=[0.1, 0.3, 0.5, 0.7, None, 1.0, 1.5],
+    C=["red", "orange", "yellow", "green", "blue", "indigo", "violet"]
+)
+
+# From a list of dicts (row-oriented)
+DT = dt.Frame([
+    {"A": 3, "B": 7},
+    {"A": 0, "B": 11, "C": -1},
+    {"C": 5}
+])
+
+# From a list of tuples
+DT = dt.Frame([(39, "Mary"), (17, "Jasmine"), (23, "Lily")],
+              names=["age", "name"])
+
+# Force all columns to int32
+DT = dt.Frame(A=[1, 2, 3], B=[4, 5, 6], type=dt.Type.int32)
+
+# From a CSV file
+DT = dt.Frame("train.csv")
+```
+
+## Properties
+
+<ResponseField name="nrows" type="int">
+  Number of rows in the frame. This property is also settable: assigning a smaller value truncates the frame; assigning a larger value pads with NAs. Increasing `nrows` on a keyed frame raises an error.
+
+  ```python
+  DT.nrows         # read
+  DT.nrows = 100   # truncate or extend
+  ```
+</ResponseField>
+
+<ResponseField name="ncols" type="int">
+  Number of columns in the frame (read-only). `len(DT)` also returns this value, but direct use of `.ncols` is preferred.
+</ResponseField>
+
+<ResponseField name="shape" type="Tuple[int, int]">
+  A `(nrows, ncols)` tuple. Read-only.
+
+  ```python
+  DT.shape  # e.g. (1000, 5)
+  ```
+</ResponseField>
+
+<ResponseField name="names" type="Tuple[str, ...]">
+  Tuple of column names. Each name is a non-empty string with no ASCII control characters; names are unique within the frame.
+
+  Assignable. You can rename all columns at once with a list, or rename a subset with a dict:
+
+  ```python
+  DT.names = ["x", "y", "z"]          # rename all
+  DT.names = {"old_name": "new_name"} # rename one
+  del DT.names                         # reset to C0, C1, ...
+  ```
+</ResponseField>
+
+<ResponseField name="types" type="List[Type]">
+  List of `dt.Type` objects, one per column. Added in v1.0.0. Prefer this over `.stypes` and `.ltypes`.
+</ResponseField>
+
+<ResponseField name="stypes" type="Tuple[stype, ...]">
+  Tuple of `dt.stype` values (storage types) for each column.
+
+  <Warning>Deprecated since v1.0.0. Will be removed in v1.2.0. Use `.types` instead.</Warning>
+</ResponseField>
+
+<ResponseField name="ltypes" type="Tuple[ltype, ...]">
+  Tuple of `dt.ltype` values (logical types) for each column.
+
+  <Warning>Deprecated since v1.0.0. Will be removed in v1.2.0. Use `.types` instead.</Warning>
+</ResponseField>
+
+<ResponseField name="key" type="Tuple[str, ...]">
+  Tuple of column names that form the primary key. Returns an empty tuple if no key is set.
+
+  Assigning to this property sets the primary key: the specified column(s) are moved to the front, the frame is sorted, and values must be unique. Set to `None` or use `del DT.key` to remove the key.
+
+  ```python
+  DT.key = "id"               # single-column key
+  DT.key = ["year", "month"]  # composite key
+  del DT.key                  # remove key
+  ```
+</ResponseField>
+
+<ResponseField name="source" type="str | None">
+  The file path, URL, or command that this frame was loaded from. Returns `None` if the frame was computed or modified. Read-only. Added in v0.11.
+</ResponseField>
+
+## Methods
+
+### Selection
+
+#### `head(n=10)`
+
+Return the first `n` rows of the frame. Equivalent to `DT[:n, :]`.
+
+<ParamField path="n" type="int" default="10">
+  Maximum number of rows to return. Must be non-negative.
+</ParamField>
+
+Returns a new `Frame` with up to `n` rows and the same columns.
+
+```python
+DT.head()     # first 10 rows
+DT.head(3)    # first 3 rows
+```
+
+#### `tail(n=10)`
+
+Return the last `n` rows of the frame. Equivalent to `DT[-n:, :]` (except when `n` is 0).
+
+<ParamField path="n" type="int" default="10">
+  Maximum number of rows to return. Must be non-negative.
+</ParamField>
+
+Returns a new `Frame` with up to `n` rows and the same columns.
+
+```python
+DT.tail()     # last 10 rows
+DT.tail(3)    # last 3 rows
+```
+
+#### `copy(deep=False)`
+
+Make a copy of the frame, preserving column names, types, and key.
+
+<ParamField path="deep" type="bool" default="false">
+  If `False` (default), produces a shallow copy with copy-on-write semantics — data buffers are shared until modified. If `True`, produces a fully independent deep copy with all data physically written to new memory.
+</ParamField>
+
+Returns a new `Frame`.
+
+```python
+DT2 = DT.copy()          # shallow (fast)
+DT3 = DT.copy(deep=True) # deep (independent)
+
+# Also available via the standard library:
+import copy
+DT_shallow = copy.copy(DT)
+DT_deep    = copy.deepcopy(DT)
+```
+
+### Export
+
+#### `to_csv(path=None, *, sep=",", quoting="minimal", append=False, header="auto", bom=False, hex=False, compression=None, verbose=False, method="auto")`
+
+Write the frame's data to a CSV file. Uses multiple threads; thread count is controlled by `dt.options.nthreads`.
+
+<ParamField path="path" type="str | None">
+  Output file path. If the file exists it is overwritten. If `None` (default), returns the CSV text as a string (or `bytes` if compression is enabled).
+</ParamField>
+
+<ParamField path="sep" type="str" default=",">
+  Field separator, must be a single character.
+</ParamField>
+
+<ParamField path="quoting" type='"minimal" | "all" | "nonnumeric" | "none" | csv.QUOTE_*' default='"minimal"'>
+  Quoting style. `"minimal"` quotes only when necessary; `"all"` quotes every field; `"nonnumeric"` quotes all strings; `"none"` disables quoting entirely (may produce invalid CSV).
+</ParamField>
+
+<ParamField path="append" type="bool" default="false">
+  If `True`, opens the file in append mode instead of overwriting it.
+</ParamField>
+
+<ParamField path="header" type='bool | "auto"' default='"auto"'>
+  Whether to write the header row. `"auto"` writes a header unless appending to an existing file.
+</ParamField>
+
+<ParamField path="bom" type="bool" default="false">
+  Insert a byte-order mark. Ignored when appending. Useful for Excel compatibility.
+</ParamField>
+
+<ParamField path="hex" type="bool" default="false">
+  Write floating-point values in hexadecimal format (C `%a`). Approximately 3× faster to write and read than decimal, at the cost of human readability.
+</ParamField>
+
+<ParamField path="compression" type='"gzip" | "auto" | None' default="None">
+  Output compression. `"auto"` infers from file extension. Only `"gzip"` is currently supported. Cannot be combined with `append=True`.
+</ParamField>
+
+<ParamField path="method" type='"mmap" | "write" | "auto"' default='"auto"'>
+  Disk-writing method. `"mmap"` may be faster on some operating systems; `"write"` is more portable.
+</ParamField>
+
+Returns `None` when writing to a file, or a `str` (or `bytes` if compressed) when `path` is empty.
+
+```python
+DT.to_csv("output.csv")               # write to file
+csv_text = DT.to_csv()                # return as string
+DT.to_csv("output.csv.gz",
+          compression="gzip")         # gzip-compressed
+DT.to_csv("log.csv", append=True,
+          header=False)               # append without header
+```
+
+#### `to_jay(path=None, method="auto")`
+
+Save the frame to a binary `.jay` file. Jay is a datatable-native format that supports memory-mapping.
+
+<ParamField path="path" type="str | None">
+  Destination file path. If `None`, serializes the frame into memory and returns a `bytes` object.
+</ParamField>
+
+<ParamField path="method" type='"mmap" | "write" | "auto"' default='"auto"'>
+  Writing method. Has no effect when `path` is `None`.
+</ParamField>
+
+Returns `None` when writing to a file, or `bytes` when `path` is `None`.
+
+```python
+DT.to_jay("data.jay")        # write to disk
+blob = DT.to_jay()           # serialize to bytes in memory
+```
+
+#### `to_pandas()`
+
+Convert the frame to a `pandas.DataFrame`. Key columns become the pandas index.
+
+Returns a `pandas.DataFrame`. Raises `ImportError` if `pandas` is not installed.
+
+```python
+df = DT.to_pandas()
+```
+
+#### `to_numpy(type=None, column=None, c_contiguous=False)`
+
+Convert the frame to a 2D numpy array.
+
+When the frame has a single non-virtual, non-string column and no `type` override, the returned array shares memory with the frame (no copy). Otherwise data is copied. Frames with NA values return a `numpy.ma.MaskedArray`.
+
+<ParamField path="type" type="Type | type-like">
+  Cast all data to this type before converting.
+</ParamField>
+
+<ParamField path="column" type="int">
+  Convert a single column (by index, negative indices supported). Returns a 1D array.
+</ParamField>
+
+<ParamField path="c_contiguous" type="bool" default="false">
+  If `True`, returns a row-major (C-contiguous) array. Default is column-major.
+</ParamField>
+
+Returns `numpy.ndarray` or `numpy.ma.MaskedArray`. Raises `ImportError` if `numpy` is not installed.
+
+```python
+arr = DT.to_numpy()
+arr = DT.to_numpy(type=dt.float32)
+col = DT.to_numpy(column=0)   # 1D array
+```
+
+#### `to_dict()`
+
+Convert the frame to a `dict` of lists, keyed by column name. Column order is preserved.
+
+Returns `Dict[str, List]`.
+
+```python
+DT.to_dict()
+# {"A": [1, 2, 3], "B": ["aye", "nay", "tain"]}
+```
+
+#### `to_list()`
+
+Convert the frame to a list of lists, by columns. Each inner list is one column.
+
+Returns `List[List]` of length `ncols`.
+
+```python
+DT.to_list()
+# [[1, 2, 3], ["aye", "nay", "tain"]]
+```
+
+#### `to_tuples()`
+
+Convert the frame to a list of tuples, by rows. Each tuple contains one row of data.
+
+Returns `List[Tuple]` of length `nrows`.
+
+```python
+DT.to_tuples()
+# [(1, "aye"), (2, "nay"), (3, "tain")]
+```
+
+#### `to_arrow()`
+
+Convert the frame to a `pyarrow.Table`. The conversion is multi-threaded and involves copying the data (except when data was originally imported from Arrow).
+
+Returns `pyarrow.Table`. Raises `ImportError` if `pyarrow` is not installed.
+
+```python
+arrow_table = DT.to_arrow()
+```
+
+### Aggregation
+
+All aggregation methods return a new single-row Frame with the same column names. Each method also has a `method1()` variant that operates on a single-column frame and returns a scalar.
+
+#### `sum()`
+
+Sum of all values in each column. Integer and boolean columns return `int64`; `float32` columns return `float32`; `float64` columns return `float64`. Non-numeric columns return NA as `float64`.
+
+```python
+DT.sum()
+value = DT[:, "A"].sum1()  # scalar for one column
+```
+
+#### `min()` / `max()`
+
+Minimum / maximum value per column. Returns a one-row Frame of the same types as the source columns.
+
+```python
+DT.min()
+DT.max()
+```
+
+#### `mean()`
+
+Mean per column. All columns return `float64`. String and object columns return NA.
+
+```python
+DT.mean()
+```
+
+#### `sd()`
+
+Standard deviation per column. Returns `float64` for all columns.
+
+```python
+DT.sd()
+```
+
+#### `countna()`
+
+Count of NA (missing) values per column. All result columns are `int64`.
+
+```python
+DT.countna()
+```
+
+#### `nunique()`
+
+Number of unique values per column.
+
+```python
+DT.nunique()
+```
+
+#### `mode()`
+
+Most frequently occurring value per column.
+
+```python
+DT.mode()
+```
+
+#### `kurt()`
+
+Excess kurtosis per column (Fisher's definition, normal = 0).
+
+```python
+DT.kurt()
+```
+
+#### `skew()`
+
+Skewness per column.
+
+```python
+DT.skew()
+```
+
+### Modification
+
+#### `cbind(*frames, force=False)`
+
+Append columns from one or more frames to this frame, in-place.
+
+All frames must have the same number of rows, unless they have exactly one row (which is replicated) or `force=True`. Column name conflicts are resolved by automatic name mangling.
+
+<Warning>
+This method modifies the frame in-place. Calling it on a temporary expression like `DT[:, :].cbind(other)` has no effect on `DT`.
+</Warning>
+
+<ParamField path="frames" type="Frame | List[Frame] | None">
+  One or more frames to append. `None` values are ignored.
+</ParamField>
+
+<ParamField path="force" type="bool" default="false">
+  If `True`, frames with mismatched row counts are allowed; shorter frames are padded with NAs (single-row frames are replicated instead).
+</ParamField>
+
+Returns `None` (modifies in-place).
+
+```python
+DT0 = dt.Frame(A=[1, 2, 3], B=[4, 7, 0])
+DT1 = dt.Frame(N=[-1, -2, -5])
+DT0.cbind(DT1)
+# DT0 now has columns A, B, N
+
+# Cbind multiple at once (more efficient than one-by-one)
+DT0.cbind(DT1, DT2, DT3)
+```
+
+#### `rbind(*frames, force=False, bynames=True)`
+
+Append rows from one or more frames to this frame, in-place. Equivalent to `list.extend()` — rows are stacked vertically.
+
+Column types are promoted as needed (bool → int → float). Incompatible types raise `TypeError` unless `force=True`.
+
+<ParamField path="frames" type="Frame | List[Frame]">
+  One or more frames to append. They should have the same column structure unless `force=True`.
+</ParamField>
+
+<ParamField path="force" type="bool" default="false">
+  If `True`, mismatched column sets are allowed (gaps filled with NA). Incompatible types are coerced to string.
+</ParamField>
+
+<ParamField path="bynames" type="bool" default="true">
+  If `True` (default), columns are matched by name. If `False`, columns are matched positionally.
+</ParamField>
+
+Returns `None` (modifies in-place).
+
+```python
+DT.rbind(DT_extra)
+DT.rbind(DT1, DT2, force=True)  # mismatched columns OK
+```
+
+#### `sort(*cols)`
+
+Sort the frame by one or more columns. Returns a new sorted frame; the original is not modified.
+
+<ParamField path="cols" type="str | int">
+  Names or indices of columns to sort by. If no columns are given, all columns are used.
+</ParamField>
+
+Returns a new `Frame`.
+
+```python
+DT.sort("age")            # sort by column name
+DT.sort("year", "month")  # sort by multiple columns
+DT.sort(0)                # sort by first column
+```
+
+#### `replace(replace_what, replace_with)`
+
+Search and replace values throughout the entire frame, in-place. Each value is replaced only in columns of a compatible type (`None` matches any column).
+
+The operation never changes a column's logical type, but may change its storage type if the replacement value requires a wider representation.
+
+<ParamField path="replace_what" type="None | bool | int | float | str | list | dict">
+  Value(s) to find. If a `dict`, it maps search values to their replacements and `replace_with` must be omitted.
+</ParamField>
+
+<ParamField path="replace_with" type="None | bool | int | float | str | list">
+  Replacement value(s). Must be a single value if `replace_what` is a single value, or a list of the same length if `replace_what` is a list.
+</ParamField>
+
+Returns `None` (modifies in-place).
+
+```python
+DT.replace(0, -1)                          # replace integer
+DT.replace(None, 0)                        # fill NAs with 0
+DT.replace([-1, None, "?"], [0, 0, "NA"])  # multiple replacements
+DT.replace({-1: 0, "bad": "N/A"})         # using a dict
+```
+
+#### `materialize(to_memory=False)`
+
+Force all virtual (lazily computed) columns to be physically written to memory.
+
+Useful when you want to break internal references to a larger source frame so that the original can be garbage-collected, or when you want to ensure all delayed computations are resolved.
+
+<ParamField path="to_memory" type="bool" default="false">
+  If `True`, also copies memory-mapped columns (e.g., those opened from a Jay file on disk) into RAM.
+</ParamField>
+
+Returns `None` (modifies in-place).
+
+```python
+DT.materialize()
+DT.materialize(to_memory=True)  # force everything into RAM
+```
+
+### Utility
+
+#### `export_names()`
+
+Return a tuple of f-expressions for all columns, in order. Assigning these to variables lets you reference columns without the `f.` prefix.
+
+```python
+A, B, C = DT.export_names()
+result = DT[A + B > C, :]
+
+# Export a subset
+A, B = DT[:, :2].export_names()
+A, B, *_ = DT.export_names()
+```
+
+The exported expressions refer to columns by name and work with any frame that has matching column names.
+
+Returns `Tuple[FExpr, ...]`.
+
+#### `colindex(column)`
+
+Return the integer index (0-based) of a column.
+
+<ParamField path="column" type="str | int | FExpr">
+  Column name, index (negative counts from the end), or f-expression (`f.A`, `f[3]`).
+</ParamField>
+
+Returns `int`. Raises `KeyError` for an unknown name, or `IndexError` for an out-of-range index.
+
+```python
+DT.colindex("B")    # 1
+DT.colindex(-1)     # last column index
+DT.colindex(f.A)    # same as colindex("A")
+```
+
+#### `view(interactive=None, plain=False)`
+
+Display the frame in an interactive viewer.
+
+<Warning>
+This method is currently not working properly. See [issue #2669](https://github.com/h2oai/datatable/issues/2669).
+</Warning>

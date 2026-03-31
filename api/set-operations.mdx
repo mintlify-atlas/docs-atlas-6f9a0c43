@@ -1,0 +1,403 @@
+---
+title: "Set Operations"
+description: "Functions for combining, comparing, and deduplicating datatable Frames using set theory operations and row/column binding."
+---
+
+datatable provides a suite of functions for treating single-column Frames as sets, as well as utilities for binding multiple frames together by rows or columns.
+
+<Note>
+The set operations (`union`, `intersect`, `setdiff`, `symdiff`, `unique`) require each input frame to have **exactly one column**. Passing a multi-column frame raises `ValueError`. Columns of type `obj64` are not supported.
+</Note>
+
+---
+
+## union
+
+```python
+union(*frames)
+```
+
+Find the union of values across all `frames`. Returns every distinct value that appears in **at least one** frame.
+
+Equivalent to `dt.unique(dt.rbind(*frames))`.
+
+<ParamField path="*frames" type="Frame, Frame, ..." required>
+  Input single-column frames. Empty frames are accepted.
+</ParamField>
+
+### Returns
+
+<ResponseField name="frame" type="Frame">
+  A single-column frame of unique values. The column type is the smallest common stype of all input columns. Result is sorted.
+</ResponseField>
+
+### Example
+
+```python
+from datatable import dt
+
+df = dt.Frame({"A": [1, 1, 2, 1, 2],
+               "B": [None, 2, 3, 4, 5],
+               "C": [1, 2, 1, 1, 2]})
+
+# Union all three columns (each column is one "set")
+dt.union(*df)
+#    |     A
+#    | int32
+# -- + -----
+#  0 |    NA
+#  1 |     1
+#  2 |     2
+#  3 |     3
+#  4 |     4
+#  5 |     5
+
+# Union of two specific columns
+dt.union(df["A"], df["C"])
+#    |     A
+#    | int32
+# -- + -----
+#  0 |     1
+#  1 |     2
+```
+
+---
+
+## intersect
+
+```python
+intersect(*frames)
+```
+
+Find the intersection of values across all `frames`. Returns values that are present in **every** frame.
+
+<ParamField path="*frames" type="Frame, Frame, ..." required>
+  Input single-column frames. Empty frames are accepted.
+</ParamField>
+
+### Returns
+
+<ResponseField name="frame" type="Frame">
+  A single-column frame of values common to all inputs. The column type is the smallest common stype of all input columns.
+</ResponseField>
+
+### Example
+
+```python
+from datatable import dt
+
+s1 = dt.Frame([4, 5, 6, 20, 42])
+s2 = dt.Frame([1, 2, 3, 5, 42])
+
+dt.intersect(s1, s2)
+#    |    C0
+#    | int32
+# -- + -----
+#  0 |     5
+#  1 |    42
+```
+
+---
+
+## setdiff
+
+```python
+setdiff(frame0, *frames)
+```
+
+Find the set difference between `frame0` and the other `frames`. Returns values that are present in `frame0` but **not** in any of the other frames.
+
+<ParamField path="frame0" type="Frame" required>
+  The base single-column frame.
+</ParamField>
+
+<ParamField path="*frames" type="Frame, Frame, ..." required>
+  One or more single-column frames to subtract from `frame0`.
+</ParamField>
+
+### Returns
+
+<ResponseField name="frame" type="Frame">
+  A single-column frame containing values from `frame0` that do not appear in any other input frame. The column type is the smallest common stype of all input columns.
+</ResponseField>
+
+### Example
+
+```python
+from datatable import dt
+
+s1 = dt.Frame([4, 5, 6, 20, 42])
+s2 = dt.Frame([1, 2, 3, 5, 42])
+
+dt.setdiff(s1, s2)
+#    |    C0
+#    | int32
+# -- + -----
+#  0 |     4
+#  1 |     6
+#  2 |    20
+```
+
+---
+
+## symdiff
+
+```python
+symdiff(*frames)
+```
+
+Find the symmetric difference of values across all `frames`. For two frames this is values that appear in **either** frame but **not both**. For more than two frames, values that appear in an **odd** number of frames are returned.
+
+<ParamField path="*frames" type="Frame, Frame, ..." required>
+  Input single-column frames. Empty frames are accepted.
+</ParamField>
+
+### Returns
+
+<ResponseField name="frame" type="Frame">
+  A single-column frame. The column type is the smallest common stype of all input columns.
+</ResponseField>
+
+### Example
+
+```python
+from datatable import dt
+
+df = dt.Frame({"A": [1, 1, 2, 1, 2],
+               "B": [None, 2, 3, 4, 5],
+               "C": [1, 2, 1, 1, 2]})
+
+# Symmetric difference of two columns
+dt.symdiff(df["A"], df["B"])
+#    |     A
+#    | int32
+# -- + -----
+#  0 |    NA
+#  1 |     1
+#  2 |     3
+#  3 |     4
+#  4 |     5
+
+# Symmetric difference across all three columns
+dt.symdiff(*df)
+#    |     A
+#    | int32
+# -- + -----
+#  0 |    NA
+#  1 |     2
+#  2 |     3
+#  3 |     4
+#  4 |     5
+```
+
+---
+
+## unique
+
+```python
+unique(frame)
+```
+
+Find all unique values across every column in `frame`. Values are sorted (using sort-based deduplication; order may change in a future release).
+
+<ParamField path="frame" type="Frame" required>
+  Input frame. May have any number of columns; all values across all columns are pooled together.
+</ParamField>
+
+### Returns
+
+<ResponseField name="frame" type="Frame">
+  A single-column frame of distinct values. The column type is the smallest common stype for all columns in the input frame. Raises `NotImplementedError` for `obj64` columns.
+</ResponseField>
+
+### Example
+
+```python
+from datatable import dt
+
+df = dt.Frame({"A": [1, 1, 2, 1, 2],
+               "B": [None, 2, 3, 4, 5],
+               "C": [1, 2, 1, 1, 2]})
+
+# Unique values across the entire frame
+dt.unique(df)
+#    |    C0
+#    | int32
+# -- + -----
+#  0 |    NA
+#  1 |     1
+#  2 |     2
+#  3 |     3
+#  4 |     4
+#  5 |     5
+
+# Unique values in a single column
+dt.unique(df["A"])
+#    |     A
+#    | int32
+# -- + -----
+#  0 |     1
+#  1 |     2
+```
+
+---
+
+## rbind
+
+```python
+rbind(*frames, force=False, bynames=True)
+```
+
+Produce a new frame by appending **rows** from several frames (vertical concatenation).
+
+<ParamField path="*frames" type="Frame | List[Frame] | None" required>
+  Frames to stack vertically.
+</ParamField>
+
+<ParamField path="force" type="bool" default="False">
+  When `True`, frames with mismatching columns (different counts or names) are accepted. Missing cells are filled with `NA`. Columns with unrelated types are converted to strings.
+</ParamField>
+
+<ParamField path="bynames" type="bool" default="True">
+  Match columns by name when `True`. When `False`, columns are matched by position instead.
+</ParamField>
+
+### Returns
+
+<ResponseField name="frame" type="Frame">
+  A new frame whose rows are the rows of all input frames concatenated in order.
+</ResponseField>
+
+### Example
+
+<CodeGroup>
+
+```python Basic rbind
+from datatable import dt
+
+DT1 = dt.Frame({"Weight": [5, 4, 6], "Height": [170, 172, 180]})
+DT2 = dt.Frame({"Height": [180, 181, 169], "Weight": [4, 4, 5]})
+
+dt.rbind(DT1, DT2)
+#    | Weight  Height
+#    |  int32   int32
+# -- + ------  ------
+#  0 |      5     170
+#  1 |      4     172
+#  2 |      6     180
+#  3 |      4     180
+#  4 |      4     181
+#  5 |      5     169
+# [6 rows x 2 columns]
+```
+
+```python Force mismatched columns
+from datatable import dt
+
+DT1 = dt.Frame({"Weight": [5, 4, 6], "Height": [170, 172, 180]})
+DT2 = dt.Frame({"Weight": [4, 4, 5], "Height": [180, 181, 169], "Age": [25, 50, 67]})
+
+dt.rbind(DT1, DT2, force=True)
+#    | Weight  Height    Age
+#    |  int32   int32  int32
+# -- + ------  ------  -----
+#  0 |      5     170     NA
+#  1 |      4     172     NA
+#  2 |      6     180     NA
+#  3 |      4     180     25
+#  4 |      4     181     50
+#  5 |      5     169     67
+```
+
+```python Bind by position
+from datatable import dt
+
+DT1 = dt.Frame({"Weight": [5, 4], "Height": [170, 172]})
+DT2 = dt.Frame({"Height": [180, 181], "Weight": [4, 4]})
+
+dt.rbind(DT1, DT2, bynames=False)
+#    | Weight  Height
+#    |  int32   int32
+# -- + ------  ------
+#  0 |      5     170
+#  1 |      4     172
+#  2 |    180       4
+#  3 |    181       4
+```
+
+</CodeGroup>
+
+---
+
+## cbind
+
+```python
+cbind(*frames, force=False)
+```
+
+Create a new frame by appending **columns** from several frames (horizontal concatenation). Returns a new Frame; the input frames are not modified.
+
+<ParamField path="*frames" type="Frame | List[Frame] | None" required>
+  Frames to concatenate column-wise. `None` values are silently skipped.
+</ParamField>
+
+<ParamField path="force" type="bool" default="False">
+  When `True`, frames with unequal row counts are accepted. The result has as many rows as the largest input frame. Shorter frames are padded with `NA` (frames with exactly 1 row are replicated instead).
+</ParamField>
+
+### Returns
+
+<ResponseField name="frame" type="Frame">
+  A new frame whose columns are the columns of all input frames placed side by side.
+</ResponseField>
+
+### Example
+
+<CodeGroup>
+
+```python Basic cbind
+from datatable import dt
+
+DT = dt.Frame(A=[1, 2, 3], B=[4, 7, 0])
+frame1 = dt.Frame(N=[-1, -2, -5])
+
+dt.cbind([DT, frame1])
+#    |     A      B      N
+#    | int32  int32  int32
+# -- + -----  -----  -----
+#  0 |     1      4     -1
+#  1 |     2      7     -2
+#  2 |     3      0     -5
+```
+
+```python Force unequal row counts
+from datatable import dt
+
+DT = dt.Frame(A=[1, 2, 3], B=[4, 7, 0])
+frame2 = dt.Frame(N=[-1, -2, -5, -20])
+
+dt.cbind([DT, frame2], force=True)
+#    |     A      B      N
+#    | int32  int32  int32
+# -- + -----  -----  -----
+#  0 |     1      4     -1
+#  1 |     2      7     -2
+#  2 |     3      0     -5
+#  3 |    NA     NA    -20
+```
+
+</CodeGroup>
+
+---
+
+## Set operations quick reference
+
+| Function | Description | Input |
+|---|---|---|
+| `union(*frames)` | All distinct values from any frame | 1-column frames |
+| `intersect(*frames)` | Values present in every frame | 1-column frames |
+| `setdiff(frame0, *frames)` | Values in `frame0` not in any other | 1-column frames |
+| `symdiff(*frames)` | Values in an odd number of frames | 1-column frames |
+| `unique(frame)` | Distinct values across all columns | Any frame |
+| `rbind(*frames)` | Stack frames vertically | Any frames |
+| `cbind(*frames)` | Stack frames horizontally | Any frames |

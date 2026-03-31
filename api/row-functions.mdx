@@ -1,0 +1,533 @@
+---
+title: "Row-wise Functions"
+description: "Functions that aggregate across columns within each row, returning a single output column."
+---
+
+Row-wise functions operate **horizontally** — for each row they reduce multiple column values into a single result. The output is always a single column with the same number of rows as the input.
+
+<Tip>
+Row functions differ from regular aggregation functions such as `dt.sum()` or `dt.mean()`, which reduce along the **row axis** and return one result per group or one result for the entire frame. Row functions reduce along the **column axis** and return one value per row.
+
+This is equivalent to pandas aggregations called with `axis=1`.
+</Tip>
+
+All row functions accept `*cols` (a variadic FExpr), are used in the `j` position of `DT[i, j, ...]`, and return an `FExpr` consisting of **one column** with the same number of rows as the input.
+
+---
+
+## rowsum
+
+```python
+rowsum(*cols)
+```
+
+For each row, calculate the sum of all values in `cols`. Missing values are treated as zero.
+
+<ParamField path="cols" type="FExpr" required>
+  Input numeric columns.
+</ParamField>
+
+Returns an `FExpr` with one column. The result type is the smallest common stype of `cols`, but not less than `int32`. Raises `TypeError` for non-numeric columns.
+
+<CodeGroup>
+
+```python All integer columns
+from datatable import dt, f, rowsum
+
+DT = dt.Frame({"a": [1, 2, 3], "b": [2, 3, 4], "c": ["dd", "ee", "ff"], "d": [5, 9, 1]})
+
+DT[:, rowsum(f[int])]
+#    |    C0
+#    | int32
+# -- + -----
+#  0 |     8
+#  1 |    14
+#  2 |     8
+```
+
+```python Selected columns
+from datatable import dt, f, rowsum
+
+DT = dt.Frame({"a": [1, 2, 3], "b": [2, 3, 4], "d": [5, 9, 1]})
+
+DT[:, rowsum(f.a, f.b)]
+#    |    C0
+#    | int32
+# -- + -----
+#  0 |     3
+#  1 |     5
+#  2 |     7
+```
+
+```python Float columns
+from datatable import dt, f, update, rowsum
+
+DT = dt.Frame("""ID   W_1   W_2   W_3
+                  1    0.1   0.2   0.3
+                  2    0.3   0.3   0.2""")
+
+DT[:, update(sum_floats=rowsum(f[float]))]
+```
+
+</CodeGroup>
+
+#### Use rowsum to filter rows with many nulls
+
+```python
+from datatable import dt, f, isna, rowsum
+
+df = dt.Frame({"city": ["city1", "city2", "city3", "city4"],
+               "2005": [144, 205, 123, None],
+               "2007": [None, None, None, None],
+               "2008": [None, 206, None, None]})
+
+# Keep rows where more than 2 values are missing
+df[rowsum(dt.isna(f[:])) > 2, :]
+```
+
+---
+
+## rowmean
+
+```python
+rowmean(*cols)
+```
+
+For each row, find the mean of all values in `cols`, skipping missing values. If a row contains only missing values, the result is also missing.
+
+<ParamField path="cols" type="FExpr" required>
+  Input numeric columns.
+</ParamField>
+
+Returns an `FExpr` with one column. The result type is `float32` when all `cols` are `float32`, and `float64` otherwise. Raises `TypeError` for non-numeric columns.
+
+```python
+from datatable import dt, f, rowmean
+
+DT = dt.Frame({"a": [None, True, True, True],
+               "b": [2, 2, 1, 0],
+               "c": [3, 3, 1, 0],
+               "d": [0, 4, 6, 0],
+               "q": [5, 5, 1, 0]})
+
+DT[:, rowmean(f[:])]
+#    |      C0
+#    | float64
+# -- + -------
+#  0 |     2.5
+#  1 |     3
+#  2 |     2
+#  3 |     0.2
+
+DT[:, rowmean(f["a", "b", "d"])]
+#    |       C0
+#    |  float64
+# -- + --------
+#  0 | 1
+#  1 | 2.33333
+#  2 | 2.66667
+#  3 | 0.333333
+```
+
+---
+
+## rowsd
+
+```python
+rowsd(*cols)
+```
+
+For each row, calculate the standard deviation among the values in `cols`, skipping missing values. If a row contains only missing values, the result is also missing.
+
+<ParamField path="cols" type="FExpr" required>
+  Input numeric columns.
+</ParamField>
+
+Returns an `FExpr` with one column. The result type is `float32` when all `cols` are `float32`, and `float64` otherwise. Raises `TypeError` for non-numeric columns.
+
+```python
+from datatable import dt, f, rowsd
+
+DT = dt.Frame({"S1": [1, 4, 5, 6, 7],
+               "S2": [2, 3, 8, 5, 1],
+               "S3": [8, 5, 2, 5, 3]})
+
+DT[:, rowsd(f[int])]
+#    |      C0
+#    | float64
+# -- + -------
+#  0 | 3.78594
+#  1 | 1
+#  2 | 3
+#  3 | 0.57735
+#  4 | 3.05505
+```
+
+---
+
+## rowmin
+
+```python
+rowmin(*cols)
+```
+
+For each row, find the smallest value among the columns from `cols`, excluding missing values.
+
+<ParamField path="cols" type="FExpr" required>
+  Input numeric columns.
+</ParamField>
+
+Returns an `FExpr` with one column. The result type is the smallest common stype for `cols`, but not less than `int32`. Raises `TypeError` for non-numeric columns.
+
+```python
+from datatable import dt, f
+
+DT = dt.Frame({"A": [1, 1, 2, 1, 2],
+               "B": [None, 2, 3, 4, None],
+               "C": [True, False, False, True, True]})
+
+DT[:, dt.rowmin(f[:])]
+#    |    C0
+#    | int32
+# -- + -----
+#  0 |     1
+#  1 |     0
+#  2 |     0
+#  3 |     1
+#  4 |     1
+```
+
+---
+
+## rowmax
+
+```python
+rowmax(*cols)
+```
+
+For each row, find the largest value among the columns from `cols`.
+
+<ParamField path="cols" type="FExpr" required>
+  Input numeric columns.
+</ParamField>
+
+Returns an `FExpr` with one column. The result type is the smallest common stype for `cols`, but not less than `int32`. Raises `TypeError` for non-numeric columns.
+
+```python
+from datatable import dt, f
+
+DT = dt.Frame({"A": [1, 1, 2, 1, 2],
+               "B": [None, 2, 3, 4, None],
+               "C": [True, False, False, True, True]})
+
+DT[:, dt.rowmax(f[:])]
+#    |    C0
+#    | int32
+# -- + -----
+#  0 |     1
+#  1 |     2
+#  2 |     3
+#  3 |     4
+#  4 |     2
+```
+
+#### Find the range (max − min) for each row
+
+```python
+from datatable import dt, f, update
+
+df = dt.Frame({"Value1": [5, 4, 3], "Value2": [4, 3, 3], "Value3": [3, 2, 5], "Value4": [2, 1, 1]})
+
+df[:, update(max_min=dt.rowmax(f[:]) - dt.rowmin(f[:]))]
+#    | Value1  Value2  Value3  Value4  max_min
+#    |  int32   int32   int32   int32    int32
+# -- + ------  ------  ------  ------  -------
+#  0 |      5       4       3       2        3
+#  1 |      4       3       2       1        3
+#  2 |      3       3       5       1        4
+```
+
+---
+
+## rowcount
+
+```python
+rowcount(*cols)
+```
+
+For each row, count the number of non-missing values in `cols`.
+
+<ParamField path="cols" type="FExpr" required>
+  Input columns of any type.
+</ParamField>
+
+Returns an `FExpr` with one `int32` column.
+
+```python
+from datatable import dt, f
+
+DT = dt.Frame({"A": [1, 1, 2, 1, 2],
+               "B": [None, 2, 3, 4, None],
+               "C": [True, False, False, True, True]})
+
+DT[:, dt.rowcount(f[:])]
+#    |    C0
+#    | int32
+# -- + -----
+#  0 |     2   # B is missing
+#  1 |     3
+#  2 |     3
+#  3 |     3
+#  4 |     2   # B is missing
+```
+
+---
+
+## rowall
+
+```python
+rowall(*cols)
+```
+
+For each row, return `True` if **all** values in `cols` are `True`, otherwise return `False`. Uses short-circuit evaluation — stops at the first `False`. Missing values are treated as `False`.
+
+<ParamField path="cols" type="FExpr[bool]" required>
+  Input boolean columns.
+</ParamField>
+
+Returns an `FExpr` with one `bool8` column. Raises `TypeError` for non-boolean columns.
+
+```python
+from datatable import dt, f
+
+df = dt.Frame({"A": [True, True], "B": [True, False], "C": [True, True]})
+
+df[:, dt.rowall(f[:])]
+#    |    C0
+#    | bool8
+# -- + -----
+#  0 |     1
+#  1 |     0
+```
+
+#### Filter rows where all columns match a condition
+
+```python
+from datatable import dt, f
+
+df = dt.Frame({"A": [1, 2, 6, 4], "B": [2, 4, 5, 6], "C": [3, 5, 4, 7], "D": [4, -3, 3, 8]})
+
+# Keep rows where all values are non-decreasing left to right
+df[dt.rowall(f[1:] >= f[:-1]), :]
+```
+
+---
+
+## rowany
+
+```python
+rowany(*cols)
+```
+
+For each row, return `True` if **any** value in `cols` is `True`, otherwise return `False`. Uses short-circuit evaluation — stops at the first `True`. Missing values are treated as `False`.
+
+<ParamField path="cols" type="FExpr[bool]" required>
+  Input boolean columns.
+</ParamField>
+
+Returns an `FExpr` with one `bool8` column. Raises `TypeError` for non-boolean columns.
+
+```python
+from datatable import dt, f
+
+df = dt.Frame({"a": [0, 0, 1, 0], "b": [0, 0, 0, 0], "c": [0, 5, 0, 0]})
+
+# Filter for rows where at least one value is greater than zero
+df[dt.rowany(f[:] > 0), :]
+#    |    a     b      c
+#    | int8  int8  int32
+# -- + ----  ----  -----
+#  0 |    0     0      5
+#  1 |    1     0      0
+```
+
+---
+
+## rowfirst
+
+```python
+rowfirst(*cols)
+```
+
+For each row, return the **first non-missing** value in `cols`. If all values in a row are missing, the result is also missing.
+
+<ParamField path="cols" type="FExpr" required>
+  Input columns. Columns must have compatible types.
+</ParamField>
+
+Returns an `FExpr` with one column. Raises `TypeError` for incompatible column types.
+
+```python
+from datatable import dt, f
+
+DT = dt.Frame({"A": [1, 1, 2, 1, 2],
+               "B": [None, 2, 3, 4, None],
+               "C": [True, False, False, True, True]})
+
+DT[:, dt.rowfirst(f[:])]
+#    |    C0
+#    | int32
+# -- + -----
+#  0 |     1
+#  1 |     1
+#  2 |     2
+#  3 |     1
+#  4 |     2
+
+# First non-missing among B and C
+DT[:, dt.rowfirst(f["B", "C"])]
+#    |    C0
+#    | int32
+# -- + -----
+#  0 |     1
+#  1 |     2
+#  2 |     3
+#  3 |     4
+#  4 |     1
+```
+
+---
+
+## rowlast
+
+```python
+rowlast(*cols)
+```
+
+For each row, return the **last non-missing** value in `cols`. If all values in a row are missing, the result is also missing.
+
+<ParamField path="cols" type="FExpr" required>
+  Input columns. Columns must have compatible types.
+</ParamField>
+
+Returns an `FExpr` with one column. Raises `TypeError` for incompatible column types.
+
+```python
+from datatable import dt, f
+
+df = dt.Frame({"A": [1, None, None, None],
+               "B": [None, 3, 4, None],
+               "C": [2, None, 5, None]})
+
+df[:, dt.rowlast(f[:])]
+#    |    C0
+#    | int32
+# -- + -----
+#  0 |     2
+#  1 |     3
+#  2 |     5
+#  3 |    NA
+
+# Filter rows where the last value is greater than the first
+df[dt.rowlast(f[:]) > dt.rowfirst(f[:]), :]
+```
+
+---
+
+## rowargmax
+
+```python
+rowargmax(*cols)
+```
+
+For each row, return the **column index** of the largest value. When the maximum occurs in multiple columns, the smallest (leftmost) column index is returned.
+
+Added in version 1.1.0.
+
+<ParamField path="cols" type="FExpr" required>
+  Input numeric columns.
+</ParamField>
+
+Returns an `FExpr` with one `int64` column. Raises `TypeError` for non-numeric columns.
+
+```python
+from datatable import dt, f
+
+DT = dt.Frame({"A": [1, 1, 2, 1, 2],
+               "B": [None, 2, 3, 4, None],
+               "C": [True, False, False, True, True]})
+
+DT[:, dt.rowargmax(f[:])]
+#    |    C0
+#    | int64
+# -- + -----
+#  0 |     0   # A is largest (B is NA)
+#  1 |     1   # B=2 > A=1
+#  2 |     1   # B=3 > A=2
+#  3 |     1   # B=4 > A=1
+#  4 |     0   # A=2 (B is NA)
+```
+
+---
+
+## rowargmin
+
+```python
+rowargmin(*cols)
+```
+
+For each row, return the **column index** of the smallest value.
+
+Added in version 1.1.0.
+
+<ParamField path="cols" type="FExpr" required>
+  Input numeric columns.
+</ParamField>
+
+Returns an `FExpr` with one `int64` column. Raises `TypeError` for non-numeric columns.
+
+```python
+from datatable import dt, f
+
+DT = dt.Frame({"A": [1, 1, 2, 1, 2],
+               "B": [None, 2, 3, 4, None],
+               "C": [True, False, False, True, True]})
+
+DT[:, dt.rowargmin(f[:])]
+#    |    C0
+#    | int64
+# -- + -----
+#  0 |     0   # A is smallest (B is NA)
+#  1 |     2   # C=False(0) < A=1
+#  2 |     2   # C=False(0) < A=2
+#  3 |     0   # A=1 < B=4
+#  4 |     2   # C=True(1) < A=2
+```
+
+---
+
+## Combined example
+
+Compute row-level statistics (count, sum, mean, sd) in a single expression:
+
+```python
+from datatable import dt, f, update
+
+df = dt.Frame("""ORD  A   B   C    D
+                198  23  45  NaN  12
+                138  25  NaN NaN  62
+                625  52  36  49   35""")
+
+df[:, update(
+    rowcount=dt.rowcount(f[:]),
+    rowsum=dt.rowsum(f[:]),
+    rowmean=dt.rowmean(f[:]),
+    rowsd=dt.rowsd(f[:]),
+)]
+#    |   ORD        A        B        C      D  rowcount   rowsum  rowmean     rowsd
+#    | int32  float64  float64  float64  int32     int32  float64  float64   float64
+# -- + -----  -------  -------  -------  -----  --------  -------  -------  --------
+#  0 |   198       23       45       NA     12         4      278     69.5   86.7583
+#  1 |   138       25       NA       NA     62         3      225     75     57.6108
+#  2 |   625       52       36       49     35         5      797    159.4  260.389
+```
